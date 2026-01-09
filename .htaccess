@@ -1,20 +1,15 @@
-# .htaccess (di root folder fypbaru/)
+# .htaccess - ROOT FOLDER
 RewriteEngine On
 
-# Redirect semua request ke index.php
+# Fix logout path
+RewriteRule ^logout/?$ logout.php [L,QSA]
+
+# Redirect to index if file doesn't exist
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
+RewriteRule ^(.*)$ index.php [L,QSA]
 
 # Security headers
 Header set X-Content-Type-Options "nosniff"
 Header set X-Frame-Options "SAMEORIGIN"
-
-# .htaccess dalam admin/views/
-Options -Indexes
-
-# Allow all
-<Files *>
-    Order Allow,Deny
-    Allow from all
-</Files>
+Header set X-XSS-Protection "1; mode=block"

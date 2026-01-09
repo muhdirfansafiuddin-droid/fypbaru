@@ -14,18 +14,6 @@ $auth = new Auth();
 $user = $auth->getCurrentUser();
 $db = new Database();
 
-if (isset($_GET['page'])) {
-    $page = $_GET['page'];
-    
-    switch($page) {
-        case 'generate_qr':
-            require 'generate_qr.php';
-            exit();
-        case 'list_cadets':
-            require 'list_cadets.php';
-            exit(); }
-        }
-
 // Helper function to format time
 function timeAgo($timestamp) {
     if (empty($timestamp)) return "No data";
@@ -138,6 +126,55 @@ $sql10 = "SELECT ac.calculated_at, u.name, ac.total_amount
 $stmt10 = $db->prepare($sql10);
 $stmt10->execute();
 $latestAllowance = $stmt10->get_result()->fetch_assoc();
+
+// Get service type distribution
+$serviceSql = "SELECT service_type, COUNT(*) as count FROM users WHERE role = 'cadet' AND service_type IS NOT NULL GROUP BY service_type";
+$serviceStmt = $db->prepare($serviceSql);
+$serviceStmt->execute();
+$serviceResult = $serviceStmt->get_result();
+$serviceStats = [];
+while($row = $serviceResult->fetch_assoc()) {
+    $serviceStats[$row['service_type']] = $row['count'];
+}
+
+// Get today's activities with full details
+$todayActivitiesSql = "SELECT ts.training_type, ts.location, ts.session_time, 
+                      ts.training_date, u.name as creator,
+                      (SELECT COUNT(*) FROM attendance a WHERE a.session_id = ts.session_id AND a.status = 'present') as present_count,
+                      (SELECT COUNT(*) FROM attendance a WHERE a.session_id = ts.session_id) as total_count
+                      FROM training_sessions ts
+                      JOIN users u ON ts.created_by = u.user_id
+                      WHERE DATE(ts.training_date) = CURDATE() 
+                      ORDER BY 
+                      CASE ts.session_time 
+                          WHEN 'pagi' THEN 1
+                          WHEN 'tengah hari' THEN 2
+                          WHEN 'petang' THEN 3
+                          WHEN 'malam' THEN 4
+                      END";
+$todayStmt = $db->prepare($todayActivitiesSql);
+$todayStmt->execute();
+$todayActivities = $todayStmt->get_result();
+
+// Get pending actions count
+$pendingActions = 0;
+$pendingActions += $stats['pending_leaves'];
+
+// Check if there are attendance records pending verification
+$pendingAttendanceSql = "SELECT COUNT(*) as count FROM attendance WHERE checked_by IS NULL AND status != 'excused'";
+$pendingAttStmt = $db->prepare($pendingAttendanceSql);
+$pendingAttStmt->execute();
+$pendingAttResult = $pendingAttStmt->get_result();
+$pendingAttendance = $pendingAttResult->fetch_assoc()['count'] ?? 0;
+$pendingActions += $pendingAttendance;
+
+// Format numbers
+function formatNumber($num) {
+    if ($num >= 1000) {
+        return number_format($num / 1000, 1) . 'K';
+    }
+    return $num;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -156,6 +193,8 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
             --warning: #ed8936;
             --danger: #f56565;
             --purple: #9f7aea;
+            --indigo: #667eea;
+            --pink: #ed64a6;
         }
         
         * {
@@ -243,7 +282,9 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
             font-weight: 600;
             transition: all 0.3s;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .logout-btn:hover {
@@ -381,15 +422,16 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
             border-radius: 15px;
             padding: 25px;
             height: fit-content;
-            max-height: 600px;
+            max-height: 400px;
             overflow-y: auto;
+            margin-bottom: 30px;
         }
         
         .activity-item {
             display: flex;
             align-items: flex-start;
             gap: 15px;
-            padding: 20px 0;
+            padding: 15px 0;
             border-bottom: 1px solid #e2e8f0;
         }
         
@@ -398,33 +440,225 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
         }
         
         .activity-icon {
-            width: 50px;
-            height: 50px;
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.2rem;
+            font-size: 1rem;
             flex-shrink: 0;
         }
         
         .activity-content h4 {
             color: var(--primary);
-            margin-bottom: 5px;
-            font-size: 1rem;
+            margin-bottom: 3px;
+            font-size: 0.95rem;
         }
         
         .activity-time {
             color: #718096;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             display: flex;
             align-items: center;
             gap: 5px;
         }
         
         .activity-time i {
+            font-size: 0.7rem;
+        }
+        
+        /* SERVICE DISTRIBUTION - NOW IN RIGHT COLUMN */
+        .service-distribution {
+            background: var(--light);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        .service-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .service-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+        }
+        
+        .service-title {
+            font-size: 1.3rem;
+            color: var(--primary);
+            font-weight: 600;
+        }
+        
+        .service-list {
+            margin-top: 15px;
+        }
+        
+        .service-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .service-item:last-child {
+            border-bottom: none;
+        }
+        
+        .service-name {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .service-badge {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+        }
+        
+        .service-darat { background: var(--accent); }
+        .service-laut { background: var(--success); }
+        .service-udara { background: var(--warning); }
+        
+        .service-label {
+            font-weight: 500;
+            color: var(--secondary);
+        }
+        
+        .service-count {
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+        
+        /* TODAY'S ACTIVITIES */
+        .todays-activities {
+            background: var(--light);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .activities-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .date-badge {
+            background: var(--accent);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        .activity-list {
+            margin-top: 15px;
+        }
+        
+        .activity-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid var(--accent);
+            transition: transform 0.3s;
+            cursor: pointer;
+        }
+        
+        .activity-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .activity-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        .activity-time-badge {
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: rgba(49, 130, 206, 0.1);
+            color: var(--accent);
+            white-space: nowrap;
+        }
+        
+        .activity-details {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .activity-location {
+            color: var(--accent);
+        }
+        
+        .activity-creator {
+            color: var(--secondary);
+            font-weight: 500;
+        }
+        
+        .activity-stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .stat-pill {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: #f7fafc;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            color: var(--secondary);
+        }
+        
+        .stat-pill i {
             font-size: 0.8rem;
+        }
+        
+        .no-activities {
+            text-align: center;
+            padding: 30px 20px;
+            color: var(--secondary);
+        }
+        
+        .no-activities i {
+            font-size: 2.5rem;
+            opacity: 0.3;
+            margin-bottom: 10px;
         }
         
         /* FOOTER */
@@ -456,6 +690,10 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
+            
+            .activity-feed {
+                max-height: 300px;
+            }
         }
         
         @media (max-width: 768px) {
@@ -476,6 +714,27 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
             .stats-grid {
                 grid-template-columns: 1fr;
             }
+            
+            .activities-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .activity-header {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .activity-stats {
+                flex-wrap: wrap;
+            }
+            
+            .service-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
         }
     </style>
 </head>
@@ -490,8 +749,11 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
                 <div class="user-details">
                     <h3>Welcome, <?php echo htmlspecialchars($user['name']); ?></h3>
                     <p>Admin ID: <?php echo htmlspecialchars($user['military_number']); ?> | Role: Administrator</p>
+                    <p style="font-size: 0.8rem; opacity: 0.7; margin-top: 5px;">
+                        <i class="far fa-calendar"></i> <?php echo date('l, d F Y'); ?>
+                    </p>
                 </div>
-                <a href="../auth/logout.php" class="logout-btn">
+                <a href="../logout.php" class="logout-btn" onclick="return confirm('Log out dari sistem?')">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </a>
             </div>
@@ -519,8 +781,8 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
                 <div class="stat-icon">
                     <i class="fas fa-clock"></i>
                 </div>
-                <div class="stat-number"><?php echo $stats['pending_leaves']; ?></div>
-                <div class="stat-label">Pelepasan Tunggu</div>
+                <div class="stat-number"><?php echo $pendingActions; ?></div>
+                <div class="stat-label">Tindakan Tunggu</div>
             </div>
             
             <div class="stat-card attendance">
@@ -542,27 +804,36 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
         
         <!-- MAIN CONTENT -->
         <main class="dashboard-main">
-            <!-- LEFT COLUMN: Functions -->
+            <!-- LEFT COLUMN: Functions & Today's Activities -->
             <div class="functions-section">
                 <h2 class="section-title">
                     <i class="fas fa-sliders-h"></i> Dashboard
                 </h2>
                 
+                <!-- Functions Grid -->
                 <div class="functions-grid">
                     <a href="register_user.php" class="function-card">
                         <div class="card-icon">
                             <i class="fas fa-user-plus"></i>
                         </div>
-                        <h3 class="card-title">Urus Pengguna</h3>
+                        <h3 class="card-title">Daftar Pengguna</h3>
                         <p class="card-desc">Register new users, update user information, and manage user roles and permissions.</p>
                     </a>
+
+                    <a href="list_cadets.php" class="function-card">
+                        <div class="card-icon">
+                            <i class="fas fa-list-ol"></i>
+                        </div>
+                        <h3 class="card-title">Senarai Kadet</h3>
+                        <p class="card-desc">View and filter cadets by service type and rank level with statistics.</p>
+                    </a>
                     
-                  <a href="jana_aktiviti.php" class="function-card">
-                    <div class="card-icon">
-                 <i class="fas fa-qrcode"></i>
-                     </div>
-                 <h3 class="card-title">Jana Aktiviti</h3>
-                 <p class="card-desc">Generate dynamic QR codes for training sessions.</p>
+                    <a href="jana_aktiviti.php" class="function-card">
+                        <div class="card-icon">
+                            <i class="fas fa-calendar-plus"></i>
+                        </div>
+                        <h3 class="card-title">Jana Aktiviti</h3>
+                        <p class="card-desc">Create new training sessions and manage training activities.</p>
                     </a>
                     
                     <a href="manage_attendance.php" class="function-card">
@@ -596,18 +867,86 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
                         <h3 class="card-title">Laporan Akhir</h3>
                         <p class="card-desc">Generate comprehensive reports and export data for analysis and record-keeping.</p>
                     </a>
-
-                    <a href="list_cadets.php" class="function-card">
-    <div class="card-icon">
-        <i class="fas fa-users"></i>
-    </div>
-    <h3 class="card-title">Senarai Kadet</h3>
-    <p class="card-desc">View and filter cadets by service type and rank level with statistics.</p>
-</a>
+                </div>
+                
+                <!-- TODAY'S ACTIVITIES -->
+                <div class="todays-activities">
+                    <div class="activities-header">
+                        <h3 class="section-title" style="font-size: 1.5rem; margin-bottom: 0; border-bottom: none;">
+                            <i class="fas fa-calendar-day"></i> Aktiviti Hari Ini
+                        </h3>
+                        <div class="date-badge">
+                            <?php echo date('d F Y'); ?>
+                        </div>
+                    </div>
+                    
+                    <div class="activity-list">
+                        <?php if ($todayActivities->num_rows > 0): 
+                            while($activity = $todayActivities->fetch_assoc()): 
+                                $sessionLabels = [
+                                    'pagi' => 'Pagi (06:00-10:00)',
+                                    'tengah hari' => 'Tengah Hari (10:00-14:00)',
+                                    'petang' => 'Petang (14:00-18:00)',
+                                    'malam' => 'Malam (18:00-22:00)'
+                                ];
+                                
+                                $attendancePercent = ($activity['total_count'] > 0) 
+                                    ? round(($activity['present_count'] / $activity['total_count']) * 100, 1) 
+                                    : 0;
+                        ?>
+                        <div class="activity-card">
+                            <div class="activity-header">
+                                <div class="activity-title">
+                                    <?php echo htmlspecialchars($activity['training_type']); ?>
+                                </div>
+                                <div class="activity-time-badge">
+                                    <?php echo $sessionLabels[$activity['session_time']] ?? ucfirst($activity['session_time']); ?>
+                                </div>
+                            </div>
+                            
+                            <div class="activity-details">
+                                <span class="activity-location">
+                                    <i class="fas fa-map-marker-alt"></i> 
+                                    <?php echo htmlspecialchars($activity['location']); ?>
+                                </span>
+                                <span class="activity-creator">
+                                    <i class="fas fa-user-tie"></i> 
+                                    <?php echo htmlspecialchars($activity['creator']); ?>
+                                </span>
+                            </div>
+                            
+                            <div class="activity-stats">
+                                <div class="stat-pill">
+                                    <i class="fas fa-user-check"></i>
+                                    <?php echo $activity['present_count']; ?> hadir
+                                </div>
+                                <div class="stat-pill">
+                                    <i class="fas fa-users"></i>
+                                    <?php echo $activity['total_count']; ?> total
+                                </div>
+                                <div class="stat-pill" style="color: var(--accent); font-weight: 600;">
+                                    <i class="fas fa-chart-line"></i>
+                                    <?php echo $attendancePercent; ?>%
+                                </div>
+                            </div>
+                        </div>
+                        <?php endwhile; ?>
+                        
+                        <?php else: ?>
+                        <div class="no-activities">
+                            <i class="fas fa-calendar-times"></i>
+                            <h4>Tiada Aktiviti Hari Ini</h4>
+                            <p>Tiada sesi latihan dijadualkan untuk hari ini.</p>
+                            <a href="jana_aktiviti.php" class="btn" style="background: var(--accent); color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px;">
+                                <i class="fas fa-plus-circle"></i> Jana Aktiviti
+                            </a>
+                        </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             
-            <!-- RIGHT COLUMN: Activity Feed -->
+            <!-- RIGHT COLUMN: Activity Feed & Service Distribution -->
             <div class="activity-section">
                 <h2 class="section-title">
                     <i class="fas fa-history"></i> Aktiviti Terkini
@@ -637,12 +976,12 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
                     <!-- Activity 2: Latest training session created -->
                     <div class="activity-item">
                         <div class="activity-icon" style="background: #ed8936;">
-                            <i class="fas fa-qrcode"></i>
+                            <i class="fas fa-calendar-plus"></i>
                         </div>
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestSession): ?>
-                                    Kod QR untuk <strong><?php echo htmlspecialchars($latestSession['training_type']); ?></strong>
+                                    Sesi <strong><?php echo htmlspecialchars($latestSession['training_type']); ?></strong>
                                     <?php if ($latestSession['location']): ?>
                                         di <strong><?php echo htmlspecialchars($latestSession['location']); ?></strong>
                                     <?php endif; ?>
@@ -726,6 +1065,42 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
                         </div>
                     </div>
                 </div>
+                
+                <!-- SERVICE DISTRIBUTION - NOW AT BOTTOM OF RIGHT COLUMN -->
+                <div class="service-distribution">
+                    <div class="service-header">
+                        <div class="service-icon">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <h3 class="service-title">Taburan Perkhidmatan Kadet</h3>
+                    </div>
+                    
+                    <div class="service-list">
+                        <div class="service-item">
+                            <div class="service-name">
+                                <div class="service-badge service-darat"></div>
+                                <span class="service-label">Darat</span>
+                            </div>
+                            <div class="service-count"><?php echo $serviceStats['darat'] ?? 0; ?></div>
+                        </div>
+                        
+                        <div class="service-item">
+                            <div class="service-name">
+                                <div class="service-badge service-laut"></div>
+                                <span class="service-label">Laut</span>
+                            </div>
+                            <div class="service-count"><?php echo $serviceStats['laut'] ?? 0; ?></div>
+                        </div>
+                        
+                        <div class="service-item">
+                            <div class="service-name">
+                                <div class="service-badge service-udara"></div>
+                                <span class="service-label">Udara</span>
+                            </div>
+                            <div class="service-count"><?php echo $serviceStats['udara'] ?? 0; ?></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
         
@@ -741,17 +1116,19 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
     
     <script>
         // Auto-refresh activity feed every 60 seconds
-        setTimeout(() => {
+        setInterval(() => {
             location.reload();
         }, 60000);
         
         // Card hover effects
         document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.function-card');
+            const cards = document.querySelectorAll('.function-card, .activity-card');
             
             cards.forEach(card => {
                 card.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-5px)';
+                    this.style.transform = this.classList.contains('function-card') 
+                        ? 'translateY(-5px)' 
+                        : 'translateX(5px)';
                 });
                 
                 card.addEventListener('mouseleave', function() {
@@ -762,20 +1139,63 @@ $latestAllowance = $stmt10->get_result()->fetch_assoc();
             // Update current time
             function updateTime() {
                 const now = new Date();
-                const options = { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                };
-                // You can display this somewhere if needed
-                console.log('Last updated: ' + now.toLocaleDateString('en-MY', options));
+                const timeElement = document.querySelector('.user-details p:last-child');
+                if (timeElement) {
+                    const options = { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                    };
+                    timeElement.innerHTML = `<i class="far fa-calendar"></i> ${now.toLocaleDateString('en-MY', options)}`;
+                }
             }
             
+            // Update time every minute
             updateTime();
+            setInterval(updateTime, 60000);
+            
+            // Logout confirmation
+            const logoutBtn = document.querySelector('.logout-btn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function(e) {
+                    if (!confirm('Adakah anda pasti ingin log keluar?')) {
+                        e.preventDefault();
+                    }
+                });
+            }
+            
+            // Add loading animation to function cards when clicked
+            document.querySelectorAll('.function-card').forEach(card => {
+                card.addEventListener('click', function(e) {
+                    this.style.opacity = '0.7';
+                    setTimeout(() => {
+                        this.style.opacity = '1';
+                    }, 500);
+                });
+            });
+            
+            // Click on activity cards to go to attendance management
+            document.querySelectorAll('.activity-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    window.location.href = 'manage_attendance.php';
+                });
+            });
+            
+            // Smooth scroll for activity feed
+            const activityFeed = document.querySelector('.activity-feed');
+            if (activityFeed) {
+                activityFeed.addEventListener('wheel', function(e) {
+                    if (e.deltaY > 0) {
+                        this.scrollTop += 50;
+                    } else {
+                        this.scrollTop -= 50;
+                    }
+                });
+            }
         });
     </script>
 </body>

@@ -1,13 +1,13 @@
 <?php
-// admin/register_user.php
-require_once __DIR__ . '/../app/core/RBAC.php';
-require_once __DIR__ . '/../app/core/Auth.php';
-require_once __DIR__ . '/../app/controllers/UserController.php';
+session_start();
+require_once '../config/database.php';
 
-RBAC::checkPermission('admin');
-$user = (new Auth())->getCurrentUser();
+// Check if user is admin
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
+    header('Location: ../login.php');
+    exit();
+}
 
-$userController = new UserController();
 $message = '';
 $messageType = ''; // success, error, warning
 
@@ -22,16 +22,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'rank_level' => $_POST['rank_level'] ?? ''
     ];
     
-    $result = $userController->registerUser($formData);
+    // Validate required fields
+    $errors = [];
     
-    if ($result['success']) {
-        $message = $result['message'];
-        $messageType = 'success';
+    if (empty($formData['military_number'])) {
+        $errors[] = 'Military number is required';
+    }
+    
+    if (empty($formData['password'])) {
+        $errors[] = 'Password is required';
+    } elseif (strlen($formData['password']) < 6) {
+        $errors[] = 'Password must be at least 6 characters';
+    }
+    
+    if (empty($formData['role'])) {
+        $errors[] = 'Role is required';
+    }
+    
+    if (empty($formData['name'])) {
+        $errors[] = 'Name is required';
+    }
+    
+    // Check if military number already exists
+    if (empty($errors)) {
+        $check_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM users WHERE military_number = ?");
+        $check_stmt->execute([$formData['military_number']]);
+        $result = $check_stmt->fetch();
         
-        // Clear form on success
-        $_POST = [];
+        if ($result['count'] > 0) {
+            $errors[] = 'Military number already exists';
+        }
+    }
+    
+    // If no errors, proceed with registration
+    if (empty($errors)) {
+        try {
+            // Hash password
+            $hashed_password = password_hash($formData['password'], PASSWORD_DEFAULT);
+            
+            // Prepare SQL
+            $sql = "INSERT INTO users (military_number, password, role, name, email, service_type, rank_level, created_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
+            
+            $stmt = $pdo->prepare($sql);
+            
+            // Bind parameters
+            $params = [
+                $formData['military_number'],
+                $hashed_password,
+                $formData['role'],
+                $formData['name'],
+                $formData['email'] ?: null,
+                ($formData['role'] == 'cadet' || $formData['role'] == 'rankholder') ? $formData['service_type'] : null,
+                ($formData['role'] == 'cadet' || $formData['role'] == 'rankholder') ? $formData['rank_level'] : null
+            ];
+            
+            if ($stmt->execute($params)) {
+                $user_id = $pdo->lastInsertId();
+                
+                // Log activity
+                $log_sql = "INSERT INTO activity_logs (user_id, activity_type, description, related_id, ip_address) 
+                           VALUES (?, 'user_registered', ?, ?, ?)";
+                $log_stmt = $pdo->prepare($log_sql);
+                $log_stmt->execute([
+                    $_SESSION['user_id'],
+                    'Registered new ' . $formData['role'] . ': ' . $formData['name'],
+                    $user_id,
+                    $_SERVER['REMOTE_ADDR']
+                ]);
+                
+                $message = 'User registered successfully! User ID: ' . $user_id;
+                $messageType = 'success';
+                
+                // Clear form on success
+                $_POST = [];
+            } else {
+                $message = 'Database error: Failed to register user';
+                $messageType = 'error';
+            }
+            
+        } catch (PDOException $e) {
+            $message = 'Database error: ' . $e->getMessage();
+            $messageType = 'error';
+        }
     } else {
-        $message = $result['message'];
+        $message = implode('<br>', $errors);
         $messageType = 'error';
     }
 }
@@ -50,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             --accent: #3182ce;
             --success: #48bb78;
             --danger: #f56565;
+            --warning: #ed8936;
         }
         
         * {
@@ -98,12 +174,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .back-btn:hover {
             background: rgba(255,255,255,0.2);
             transform: translateX(-5px);
-        }
-        
-        .header h1 {
-            display: flex;
-            align-items: center;
-            gap: 15px;
         }
         
         /* MESSAGE ALERT */
@@ -187,10 +257,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
         }
         
-        input.error, select.error {
-            border-color: var(--danger);
-        }
-        
         .help-text {
             font-size: 0.85rem;
             color: #718096;
@@ -237,7 +303,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             justify-content: center;
             gap: 10px;
-            text-decoration: none;
         }
         
         .btn-primary {
@@ -277,9 +342,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 3px;
         }
         
-        .strength-weak { background: #f56565; width: 33%; }
-        .strength-medium { background: #ed8936; width: 66%; }
-        .strength-strong { background: #48bb78; width: 100%; }
+        .strength-weak { background: var(--danger); width: 33%; }
+        .strength-medium { background: var(--warning); width: 66%; }
+        .strength-strong { background: var(--success); width: 100%; }
+        
+        /* SUCCESS MESSAGE */
+        .success-message {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .success-icon {
+            font-size: 4rem;
+            color: var(--success);
+            margin-bottom: 20px;
+        }
+        
+        /* DEBUG INFO */
+        .debug-info {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            border-left: 4px solid var(--warning);
+        }
     </style>
 </head>
 <body>
@@ -292,7 +380,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h1>
                 <i class="fas fa-user-plus"></i> Register New User
             </h1>
+            <p style="opacity: 0.8; margin-top: 5px;">Register new admin, rankholder or cadet</p>
         </div>
+        
+        <!-- DEBUG INFO -->
+        <?php if (isset($_GET['debug'])): ?>
+        <div class="debug-info">
+            <strong>Database Connection Test:</strong><br>
+            <?php 
+            echo $pdo ? '✓ Connected to database' : '✗ Database connection failed';
+            echo '<br>';
+            
+            // Test users table
+            try {
+                $test_stmt = $pdo->query("SELECT COUNT(*) as total FROM users");
+                $test_result = $test_stmt->fetch();
+                echo '✓ Users table accessible - Total: ' . $test_result['total'] . ' users';
+            } catch (Exception $e) {
+                echo '✗ Error: ' . $e->getMessage();
+            }
+            ?>
+        </div>
+        <?php endif; ?>
         
         <!-- MESSAGE ALERT -->
         <?php if ($message): ?>
@@ -314,7 +423,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                    id="military_number" 
                                    name="military_number" 
                                    value="<?php echo htmlspecialchars($_POST['military_number'] ?? ''); ?>"
-                                   placeholder="e.g., CD1001, RH2001"
+                                   placeholder="e.g., CD001, RH001, ADM001"
                                    required>
                             <div class="help-text">
                                 <i class="fas fa-info-circle"></i>
@@ -401,9 +510,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <label for="service_type" class="required">Service Type</label>
                             <select id="service_type" name="service_type">
                                 <option value="">Select Service</option>
-                                <option value="darat" <?php echo ($_POST['service_type'] ?? '') == 'darat' ? 'selected' : ''; ?>>Darat</option>
-                                <option value="laut" <?php echo ($_POST['service_type'] ?? '') == 'laut' ? 'selected' : ''; ?>>Laut</option>
-                                <option value="udara" <?php echo ($_POST['service_type'] ?? '') == 'udara' ? 'selected' : ''; ?>>Udara</option>
+                                <option value="darat" <?php echo ($_POST['service_type'] ?? '') == 'darat' ? 'selected' : ''; ?>>Angkatan Darat</option>
+                                <option value="laut" <?php echo ($_POST['service_type'] ?? '') == 'laut' ? 'selected' : ''; ?>>Angkatan Laut</option>
+                                <option value="udara" <?php echo ($_POST['service_type'] ?? '') == 'udara' ? 'selected' : ''; ?>>Angkatan Udara</option>
                             </select>
                         </div>
                         
@@ -431,6 +540,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <button type="reset" class="btn btn-secondary" id="resetBtn">
                         <i class="fas fa-redo"></i> Clear Form
                     </button>
+                    <a href="list_cadets.php" class="btn" style="background: var(--secondary); color: white;">
+                        <i class="fas fa-list"></i> View Cadet List
+                    </a>
                 </div>
             </form>
         </div>
@@ -448,8 +560,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const passwordMatch = document.getElementById('passwordMatch');
             
             // Show/hide role-specific fields
-            roleSelect.addEventListener('change', function() {
-                if (this.value === 'rankholder' || this.value === 'cadet') {
+            function toggleRoleFields() {
+                if (roleSelect.value === 'rankholder' || roleSelect.value === 'cadet') {
                     roleFields.style.display = 'block';
                     serviceSelect.required = true;
                     rankSelect.required = true;
@@ -460,12 +572,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     serviceSelect.value = '';
                     rankSelect.value = '';
                 }
-            });
+            }
+            
+            roleSelect.addEventListener('change', toggleRoleFields);
             
             // Trigger change on page load if role is already selected
-            if (roleSelect.value === 'rankholder' || roleSelect.value === 'cadet') {
-                roleFields.style.display = 'block';
-            }
+            toggleRoleFields();
             
             // Password strength checker
             passwordInput.addEventListener('input', function() {
@@ -473,16 +585,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 let strength = 0;
                 
                 if (password.length >= 6) strength++;
+                if (password.length >= 8) strength++;
                 if (/[A-Z]/.test(password)) strength++;
                 if (/[0-9]/.test(password)) strength++;
                 if (/[^A-Za-z0-9]/.test(password)) strength++;
                 
                 strengthMeter.className = 'strength-meter';
                 if (strength === 0) {
-                    strengthMeter.className = 'strength-meter';
+                    // Do nothing
                 } else if (strength <= 2) {
                     strengthMeter.className = 'strength-meter strength-weak';
-                } else if (strength === 3) {
+                } else if (strength <= 3) {
                     strengthMeter.className = 'strength-meter strength-medium';
                 } else {
                     strengthMeter.className = 'strength-meter strength-strong';
@@ -490,39 +603,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
             
             // Password confirmation checker
-            confirmPassword.addEventListener('input', function() {
-                if (passwordInput.value === this.value) {
-                    passwordMatch.innerHTML = '<i class="fas fa-check" style="color: #48bb78;"></i> Passwords match';
-                    this.style.borderColor = '#48bb78';
-                } else if (this.value.length > 0) {
-                    passwordMatch.innerHTML = '<i class="fas fa-times" style="color: #f56565;"></i> Passwords do not match';
-                    this.style.borderColor = '#f56565';
+            function checkPasswordMatch() {
+                if (passwordInput.value && confirmPassword.value) {
+                    if (passwordInput.value === confirmPassword.value) {
+                        passwordMatch.innerHTML = '<i class="fas fa-check" style="color: #48bb78;"></i> Passwords match';
+                        confirmPassword.style.borderColor = '#48bb78';
+                        return true;
+                    } else {
+                        passwordMatch.innerHTML = '<i class="fas fa-times" style="color: #f56565;"></i> Passwords do not match';
+                        confirmPassword.style.borderColor = '#f56565';
+                        return false;
+                    }
                 } else {
                     passwordMatch.innerHTML = '';
-                    this.style.borderColor = '#e2e8f0';
+                    confirmPassword.style.borderColor = '#e2e8f0';
+                    return null;
+                }
+            }
+            
+            confirmPassword.addEventListener('input', checkPasswordMatch);
+            passwordInput.addEventListener('input', checkPasswordMatch);
+            
+            // Auto-generate military number suggestion based on role
+            roleSelect.addEventListener('change', function() {
+                const militaryNumberInput = document.getElementById('military_number');
+                if (!militaryNumberInput.value) {
+                    const prefix = this.value === 'admin' ? 'ADM' : 
+                                  this.value === 'rankholder' ? 'RH' : 'CD';
+                    
+                    // Generate timestamp-based number
+                    const timestamp = Date.now().toString().slice(-4);
+                    militaryNumberInput.value = prefix + timestamp;
                 }
             });
             
             // Form validation
             document.getElementById('registerForm').addEventListener('submit', function(e) {
                 let isValid = true;
+                const errorMessages = [];
                 
                 // Check password match
-                if (passwordInput.value !== confirmPassword.value) {
-                    alert('Passwords do not match!');
+                const passwordMatchResult = checkPasswordMatch();
+                if (passwordMatchResult === false) {
+                    errorMessages.push('Passwords do not match');
                     isValid = false;
                 }
                 
                 // Check role-specific fields for rankholder/cadet
                 const role = roleSelect.value;
-                if ((role === 'rankholder' || role === 'cadet') && 
-                    (!serviceSelect.value || !rankSelect.value)) {
-                    alert('Service type and rank level are required for ' + role + ' role');
+                if ((role === 'rankholder' || role === 'cadet')) {
+                    if (!serviceSelect.value) {
+                        errorMessages.push('Service type is required for ' + role + ' role');
+                        isValid = false;
+                    }
+                    if (!rankSelect.value) {
+                        errorMessages.push('Rank level is required for ' + role + ' role');
+                        isValid = false;
+                    }
+                }
+                
+                // Check password strength
+                if (passwordInput.value.length < 6) {
+                    errorMessages.push('Password must be at least 6 characters');
                     isValid = false;
                 }
                 
                 if (!isValid) {
                     e.preventDefault();
+                    if (errorMessages.length > 0) {
+                        alert('Please fix the following errors:\n\n' + errorMessages.join('\n'));
+                    }
                 }
             });
             
@@ -535,20 +685,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     strengthMeter.className = 'strength-meter';
                     passwordMatch.innerHTML = '';
                     confirmPassword.style.borderColor = '#e2e8f0';
+                    serviceSelect.required = false;
+                    rankSelect.required = false;
                 }
             });
             
-            // Auto-generate military number suggestion based on role
-            roleSelect.addEventListener('change', function() {
-                const militaryNumberInput = document.getElementById('military_number');
-                if (!militaryNumberInput.value) {
-                    const prefix = this.value === 'admin' ? 'ADM' : 
-                                  this.value === 'rankholder' ? 'RH' : 'CD';
-                    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-                    militaryNumberInput.value = prefix + random;
-                }
-            });
+            // Auto-focus first input
+            document.getElementById('military_number').focus();
         });
+        
+        // Test database connection
+        function testDatabase() {
+            fetch('test_db.php')
+                .then(response => response.text())
+                .then(data => {
+                    alert('Database Test Result:\n' + data);
+                })
+                .catch(error => {
+                    alert('Database Test Failed:\n' + error);
+                });
+        }
     </script>
 </body>
 </html>

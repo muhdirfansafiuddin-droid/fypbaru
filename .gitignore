@@ -1,3 +1,8 @@
+config/database.php
+.DS_Store
+/vendor/phpqrcode/cache/
+/vendor/phpqrcode/temp/
+
 .DS_Store
 *.log
 
