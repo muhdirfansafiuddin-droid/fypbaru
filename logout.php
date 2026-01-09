@@ -1,32 +1,22 @@
 <?php
-// logout.php - ROOT FOLDER
+// logout.php
 session_start();
 
-// Clear all session data
-$_SESSION = array();
-
-// Destroy session cookie
-if (ini_get("session.use_cookies")) {
-    $params = session_get_cookie_params();
-    setcookie(session_name(), '', time() - 42000,
-        $params["path"], 
-        $params["domain"],
-        $params["secure"], 
-        $params["httponly"]
-    );
+// Log activity if user was logged in
+if (isset($_SESSION['user_id'])) {
+    require_once 'includes/db_connect.php';
+    
+    $sql = "INSERT INTO activity_logs (user_id, activity_type, description) 
+            VALUES (?, 'logout', 'User logged out')";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt->execute();
 }
 
-// Destroy the session
-if (session_id() != "") {
-    session_destroy();
-}
+// Destroy session
+session_destroy();
 
-// Clear any browser cache
-header("Cache-Control: no-cache, no-store, must-revalidate");
-header("Pragma: no-cache");
-header("Expires: 0");
-
-// Redirect to login page
-header('Location: index.php');
+// Redirect to login
+header('Location: login.php');
 exit();
 ?>

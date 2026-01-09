@@ -1,122 +1,212 @@
 <?php
-session_start();
-require_once '../config/database.php';
+// admin/register_user.php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-// Check if user is admin
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
-    header('Location: ../login.php');
-    exit();
-}
+require_once __DIR__ . '/../includes/db_connect.php';
+require_once __DIR__ . '/../includes/auth.php';
+
+// Check admin authentication
+checkAdminAuth();
 
 $message = '';
-$messageType = ''; // success, error, warning
+$messageType = '';
+$registeredUser = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $formData = [
-        'military_number' => $_POST['military_number'] ?? '',
-        'password' => $_POST['password'] ?? '',
-        'role' => $_POST['role'] ?? '',
-        'name' => $_POST['name'] ?? '',
-        'email' => $_POST['email'] ?? '',
-        'service_type' => $_POST['service_type'] ?? '',
-        'rank_level' => $_POST['rank_level'] ?? ''
-    ];
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
+    // Hanya ambil data yang diperlukan
+    $military_number = strtoupper(trim($_POST['military_number'] ?? ''));
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $role = $_POST['role'] ?? '';
+    $phone = trim($_POST['phone'] ?? '');
+    $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : date('Y-m-d');
+    $service_type = $_POST['service_type'] ?? NULL;
+    $rank_level = $_POST['rank_level'] ?? NULL;
     
     // Validate required fields
-    $errors = [];
-    
-    if (empty($formData['military_number'])) {
-        $errors[] = 'Military number is required';
-    }
-    
-    if (empty($formData['password'])) {
-        $errors[] = 'Password is required';
-    } elseif (strlen($formData['password']) < 6) {
-        $errors[] = 'Password must be at least 6 characters';
-    }
-    
-    if (empty($formData['role'])) {
-        $errors[] = 'Role is required';
-    }
-    
-    if (empty($formData['name'])) {
-        $errors[] = 'Name is required';
-    }
-    
-    // Check if military number already exists
-    if (empty($errors)) {
-        $check_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM users WHERE military_number = ?");
-        $check_stmt->execute([$formData['military_number']]);
-        $result = $check_stmt->fetch();
-        
-        if ($result['count'] > 0) {
-            $errors[] = 'Military number already exists';
-        }
-    }
-    
-    // If no errors, proceed with registration
-    if (empty($errors)) {
-        try {
-            // Hash password
-            $hashed_password = password_hash($formData['password'], PASSWORD_DEFAULT);
-            
-            // Prepare SQL
-            $sql = "INSERT INTO users (military_number, password, role, name, email, service_type, rank_level, created_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
-            
-            $stmt = $pdo->prepare($sql);
-            
-            // Bind parameters
-            $params = [
-                $formData['military_number'],
-                $hashed_password,
-                $formData['role'],
-                $formData['name'],
-                $formData['email'] ?: null,
-                ($formData['role'] == 'cadet' || $formData['role'] == 'rankholder') ? $formData['service_type'] : null,
-                ($formData['role'] == 'cadet' || $formData['role'] == 'rankholder') ? $formData['rank_level'] : null
-            ];
-            
-            if ($stmt->execute($params)) {
-                $user_id = $pdo->lastInsertId();
-                
-                // Log activity
-                $log_sql = "INSERT INTO activity_logs (user_id, activity_type, description, related_id, ip_address) 
-                           VALUES (?, 'user_registered', ?, ?, ?)";
-                $log_stmt = $pdo->prepare($log_sql);
-                $log_stmt->execute([
-                    $_SESSION['user_id'],
-                    'Registered new ' . $formData['role'] . ': ' . $formData['name'],
-                    $user_id,
-                    $_SERVER['REMOTE_ADDR']
-                ]);
-                
-                $message = 'User registered successfully! User ID: ' . $user_id;
-                $messageType = 'success';
-                
-                // Clear form on success
-                $_POST = [];
-            } else {
-                $message = 'Database error: Failed to register user';
-                $messageType = 'error';
-            }
-            
-        } catch (PDOException $e) {
-            $message = 'Database error: ' . $e->getMessage();
-            $messageType = 'error';
-        }
-    } else {
-        $message = implode('<br>', $errors);
+    if (empty($military_number) || empty($name) || empty($email) || empty($role)) {
+        $message = 'Nombor Tentera, Nama, Emel, dan Peranan adalah wajib';
         $messageType = 'error';
+    } else {
+        // Check if military number already exists
+        $checkSql = "SELECT user_id FROM users WHERE military_number = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("s", $military_number);
+        $checkStmt->execute();
+        
+        if ($checkStmt->get_result()->num_rows > 0) {
+            $message = 'Nombor tentera sudah wujud dalam sistem!';
+            $messageType = 'error';
+        } else {
+            // Check if email already exists
+            $emailCheckSql = "SELECT user_id FROM users WHERE email = ?";
+            $emailCheckStmt = $conn->prepare($emailCheckSql);
+            $emailCheckStmt->bind_param("s", $email);
+            $emailCheckStmt->execute();
+            
+            if ($emailCheckStmt->get_result()->num_rows > 0) {
+                $message = 'Alamat emel sudah wujud dalam sistem!';
+                $messageType = 'error';
+            } else {
+                // Generate random password (8 characters)
+                $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                $password = '';
+                for ($i = 0; $i < 8; $i++) {
+                    $password .= $chars[rand(0, strlen($chars) - 1)];
+                }
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                
+                // Handle profile image upload
+                $profile_image = NULL;
+                if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] == 0) {
+                    $uploadDir = '../uploads/profile_images/';
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0777, true);
+                    }
+                    
+                    $fileExtension = strtolower(pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION));
+                    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+                    
+                    if (in_array($fileExtension, $allowedExtensions)) {
+                        $fileName = time() . '_' . preg_replace('/[^a-zA-Z0-9]/', '_', $name) . '.' . $fileExtension;
+                        $targetFile = $uploadDir . $fileName;
+                        
+                        if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $targetFile)) {
+                            $profile_image = $fileName;
+                        }
+                    }
+                }
+                
+                // SIMPLE INSERT - hanya field wajib dan ada default value
+                $sql = "INSERT INTO users (
+                    military_number, 
+                    password, 
+                    role, 
+                    name, 
+                    email, 
+                    phone,
+                    join_date,
+                    profile_image,
+                    service_type,
+                    rank_level
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                
+                $stmt = $conn->prepare($sql);
+                
+                if ($stmt) {
+                    // Hanya 10 parameter sahaja
+                    $stmt->bind_param(
+                        "ssssssssss", // 10 string parameters
+                        $military_number,
+                        $hashedPassword,
+                        $role,
+                        $name,
+                        $email,
+                        $phone,
+                        $join_date,
+                        $profile_image,
+                        $service_type,
+                        $rank_level
+                    );
+                    
+                    if ($stmt->execute()) {
+                        $userId = $stmt->insert_id;
+                        
+                        // Save credentials to file
+                        $logDir = '../logs/';
+                        if (!is_dir($logDir)) {
+                            mkdir($logDir, 0777, true);
+                        }
+                        
+                        $filename = $logDir . 'user_credentials_' . date('Y-m-d') . '.txt';
+                        $content = "=== NEW USER REGISTERED ===\n";
+                        $content .= "Time: " . date('Y-m-d H:i:s') . "\n";
+                        $content .= "User ID: " . $userId . "\n";
+                        $content .= "Name: " . $name . "\n";
+                        $content .= "Military Number: " . $military_number . "\n";
+                        $content .= "Email: " . $email . "\n";
+                        $content .= "Password: " . $password . "\n";
+                        $content .= "Role: " . $role . "\n";
+                        $content .= "Service Type: " . ($service_type ?: 'N/A') . "\n";
+                        $content .= "Rank Level: " . ($rank_level ?: 'N/A') . "\n";
+                        $content .= "Login URL: http://" . $_SERVER['HTTP_HOST'] . "\n";
+                        $content .= "===========================\n\n";
+                        
+                        file_put_contents($filename, $content, FILE_APPEND);
+                        
+                        // Log activity
+                        $activityDesc = "Registered new user: {$name} ({$military_number}) as {$role}";
+                        $logSql = "INSERT INTO activity_logs (user_id, activity_type, description, related_id) 
+                                  VALUES (?, 'user_registered', ?, ?)";
+                        $logStmt = $conn->prepare($logSql);
+                        $logStmt->bind_param("isi", $_SESSION['user_id'], $activityDesc, $userId);
+                        $logStmt->execute();
+                        
+                        $message = 'Pengguna berjaya didaftarkan! Kredensial telah disimpan untuk pengedaran manual.';
+                        $messageType = 'success';
+                        
+                        $registeredUser = [
+                            'user_id' => $userId,
+                            'military_number' => $military_number,
+                            'name' => $name,
+                            'email' => $email,
+                            'role' => $role,
+                            'service_type' => $service_type,
+                            'rank_level' => $rank_level,
+                            'password' => $password,
+                            'registered_at' => date('Y-m-d H:i:s')
+                        ];
+                    } else {
+                        $message = 'Database error: ' . $stmt->error;
+                        $messageType = 'error';
+                        error_log("Database Error: " . $stmt->error);
+                    }
+                } else {
+                    $message = 'Failed to prepare statement: ' . $conn->error;
+                    $messageType = 'error';
+                }
+            }
+        }
     }
 }
+
+// Get recent users
+$sql = "SELECT user_id, military_number, name, email, role, service_type, rank_level, created_at 
+        FROM users 
+        ORDER BY created_at DESC 
+        LIMIT 10";
+$recentUsers = $conn->query($sql);
+
+// Role options
+$roleOptions = [
+    'admin' => 'Admin',
+    'rankholder' => 'Rankholder',
+    'cadet' => 'Cadet'
+];
+
+// Service type options
+$serviceTypeOptions = [
+    'darat' => 'Darat',
+    'laut' => 'Laut',
+    'udara' => 'Udara'
+];
+
+// Rank level options
+$rankLevelOptions = [
+    'junior' => 'Junior',
+    'intermediate' => 'Intermediate',
+    'senior' => 'Senior'
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register User - CAAMS</title>
+    <title>Daftar Pengguna - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -124,8 +214,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             --secondary: #2d3748;
             --accent: #3182ce;
             --success: #48bb78;
-            --danger: #f56565;
             --warning: #ed8936;
+            --danger: #f56565;
         }
         
         * {
@@ -142,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
@@ -155,7 +245,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background: var(--primary);
             color: white;
             padding: 25px 30px;
-            position: relative;
         }
         
         .back-btn {
@@ -199,8 +288,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-left: 5px solid var(--danger);
         }
         
-        .alert i {
-            font-size: 1.5rem;
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 5px solid var(--accent);
         }
         
         @keyframes slideIn {
@@ -208,25 +299,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             to { transform: translateY(0); opacity: 1; }
         }
         
-        /* FORM */
+        /* MAIN CONTENT */
         .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
             padding: 30px;
         }
         
-        .form-group {
-            margin-bottom: 25px;
-        }
-        
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        
-        @media (max-width: 768px) {
-            .form-row {
+        @media (max-width: 900px) {
+            .content {
                 grid-template-columns: 1fr;
             }
+        }
+        
+        /* FORM */
+        .form-section, .preview-section {
+            padding: 25px;
+            background: #f7fafc;
+            border-radius: 15px;
+        }
+        
+        .section-title {
+            color: var(--primary);
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
         }
         
         label {
@@ -234,15 +340,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-bottom: 8px;
             font-weight: 600;
             color: var(--secondary);
-            font-size: 0.95rem;
         }
         
-        .required::after {
-            content: " *";
-            color: var(--danger);
-        }
-        
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e2e8f0;
@@ -251,44 +351,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: all 0.3s;
         }
         
-        input:focus, select:focus {
+        input:focus, select:focus, textarea:focus {
             border-color: var(--accent);
             outline: none;
             box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
-        }
-        
-        .help-text {
-            font-size: 0.85rem;
-            color: #718096;
-            margin-top: 5px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        /* ROLE-SPECIFIC FIELDS */
-        .role-fields {
-            display: none;
-            padding: 20px;
-            background: #f7fafc;
-            border-radius: 10px;
-            margin-top: 15px;
-            border-left: 4px solid var(--accent);
-            animation: fadeIn 0.5s ease-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        /* BUTTONS */
-        .form-actions {
-            display: flex;
-            gap: 15px;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px solid #e2e8f0;
         }
         
         .btn {
@@ -308,7 +374,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .btn-primary {
             background: var(--accent);
             color: white;
-            flex: 1;
+            width: 100%;
+            margin-top: 10px;
         }
         
         .btn-primary:hover {
@@ -317,56 +384,134 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
-        .btn-secondary {
-            background: #e2e8f0;
-            color: var(--secondary);
-        }
-        
-        .btn-secondary:hover {
-            background: #cbd5e0;
-        }
-        
-        /* PASSWORD STRENGTH */
-        .password-strength {
-            height: 5px;
-            background: #e2e8f0;
-            border-radius: 3px;
-            margin-top: 10px;
-            overflow: hidden;
-        }
-        
-        .strength-meter {
-            height: 100%;
-            width: 0%;
-            transition: width 0.3s;
-            border-radius: 3px;
-        }
-        
-        .strength-weak { background: var(--danger); width: 33%; }
-        .strength-medium { background: var(--warning); width: 66%; }
-        .strength-strong { background: var(--success); width: 100%; }
-        
-        /* SUCCESS MESSAGE */
-        .success-message {
-            text-align: center;
-            padding: 40px 20px;
-        }
-        
-        .success-icon {
-            font-size: 4rem;
-            color: var(--success);
-            margin-bottom: 20px;
-        }
-        
-        /* DEBUG INFO */
-        .debug-info {
-            background: #f7fafc;
-            padding: 15px;
+        /* USER PREVIEW */
+        .user-preview {
+            padding: 30px;
+            background: white;
             border-radius: 10px;
-            margin-bottom: 20px;
-            font-family: monospace;
-            font-size: 0.9rem;
-            border-left: 4px solid var(--warning);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .user-info {
+            margin-top: 20px;
+            padding: 20px;
+            background: #e8f4fe;
+            border-radius: 8px;
+            text-align: left;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dashed #cbd5e0;
+        }
+        
+        .info-item:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+        }
+        
+        /* CREDENTIALS BOX */
+        .credentials-box {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        .copy-btn {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-left: 10px;
+        }
+        
+        .copy-btn:hover {
+            background: #4a5568;
+        }
+        
+        /* USERS LIST */
+        .users-section {
+            grid-column: 1 / -1;
+            padding: 30px;
+            background: white;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+        
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .users-table th {
+            background: var(--primary);
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        .users-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .role-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .role-admin { background: #f56565; color: white; }
+        .role-rankholder { background: #ed8936; color: white; }
+        .role-cadet { background: #48bb78; color: white; }
+        
+        .action-btns {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+        
+        /* FORM ROW */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row, .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .required:after {
+            content: " *";
+            color: var(--danger);
+        }
+        
+        .field-hint {
+            color: #718096;
+            font-size: 0.85rem;
+            display: block;
+            margin-top: 5px;
+        }
+        
+        .field-hint i {
+            margin-right: 5px;
         }
     </style>
 </head>
@@ -375,336 +520,458 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <!-- HEADER -->
         <div class="header">
             <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                <i class="fas fa-arrow-left"></i> Kembali ke Dashboard
             </a>
             <h1>
-                <i class="fas fa-user-plus"></i> Register New User
+                <i class="fas fa-user-plus"></i> Daftar Pengguna
             </h1>
-            <p style="opacity: 0.8; margin-top: 5px;">Register new admin, rankholder or cadet</p>
+            <p style="opacity: 0.8; margin-top: 5px;">Cipta akaun pengguna baru untuk sistem CAAMS</p>
         </div>
         
-        <!-- DEBUG INFO -->
-        <?php if (isset($_GET['debug'])): ?>
-        <div class="debug-info">
-            <strong>Database Connection Test:</strong><br>
-            <?php 
-            echo $pdo ? '✓ Connected to database' : '✗ Database connection failed';
-            echo '<br>';
-            
-            // Test users table
-            try {
-                $test_stmt = $pdo->query("SELECT COUNT(*) as total FROM users");
-                $test_result = $test_stmt->fetch();
-                echo '✓ Users table accessible - Total: ' . $test_result['total'] . ' users';
-            } catch (Exception $e) {
-                echo '✗ Error: ' . $e->getMessage();
-            }
-            ?>
+        <!-- INFORMATION ALERT -->
+        <div class="alert info">
+            <i class="fas fa-info-circle"></i>
+            <div>
+                <strong>Cara penggunaan:</strong> 
+                1. Isi maklumat wajib → 
+                2. Kata laluan digenerasi automatik → 
+                3. Berikan kredensial kepada pengguna
+            </div>
         </div>
-        <?php endif; ?>
         
         <!-- MESSAGE ALERT -->
         <?php if ($message): ?>
             <div class="alert <?php echo $messageType; ?>">
-                <i class="fas <?php echo $messageType == 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'; ?>"></i>
+                <i class="fas <?php 
+                    echo $messageType == 'success' ? 'fa-check-circle' : 
+                         ($messageType == 'info' ? 'fa-info-circle' : 'fa-exclamation-triangle'); 
+                ?>"></i>
                 <div><?php echo $message; ?></div>
             </div>
         <?php endif; ?>
         
-        <!-- FORM -->
+        <!-- MAIN CONTENT -->
         <div class="content">
-            <form id="registerForm" method="POST" action="">
-                <div class="form-row">
-                    <!-- Left Column -->
-                    <div>
-                        <div class="form-group">
-                            <label for="military_number" class="required">Military Number</label>
-                            <input type="text" 
-                                   id="military_number" 
-                                   name="military_number" 
-                                   value="<?php echo htmlspecialchars($_POST['military_number'] ?? ''); ?>"
-                                   placeholder="e.g., CD001, RH001, ADM001"
-                                   required>
-                            <div class="help-text">
-                                <i class="fas fa-info-circle"></i>
-                                Format: CD (Cadet), RH (Rankholder), ADM (Admin)
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="password" class="required">Password</label>
-                            <input type="password" 
-                                   id="password" 
-                                   name="password" 
-                                   placeholder="Minimum 6 characters"
-                                   required
-                                   minlength="6">
-                            <div class="password-strength">
-                                <div class="strength-meter" id="strengthMeter"></div>
-                            </div>
-                            <div class="help-text">
-                                <i class="fas fa-shield-alt"></i>
-                                Password must be at least 6 characters
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="confirm_password" class="required">Confirm Password</label>
-                            <input type="password" 
-                                   id="confirm_password" 
-                                   name="confirm_password" 
-                                   placeholder="Re-enter password"
-                                   required>
-                            <div class="help-text" id="passwordMatch"></div>
-                        </div>
+            <!-- LEFT: FORM -->
+            <div class="form-section">
+                <h2 class="section-title">
+                    <i class="fas fa-plus-circle"></i> Daftar Pengguna Baru
+                </h2>
+                
+                <form method="POST" action="" enctype="multipart/form-data" id="userForm">
+                    <input type="hidden" name="register_user" value="1">
+                    
+                    <div class="form-group">
+                        <label for="military_number" class="required">Nombor Tentera *</label>
+                        <input type="text" 
+                               id="military_number" 
+                               name="military_number" 
+                               placeholder="Contoh: CD001, RH001, ADM001"
+                               required
+                               value="<?php echo isset($_POST['military_number']) ? htmlspecialchars($_POST['military_number']) : ''; ?>">
+                        <span class="field-hint">
+                            <i class="fas fa-info-circle"></i> 
+                            Format: CD untuk kadet, RH untuk rankholder, ADM untuk admin
+                        </span>
                     </div>
                     
-                    <!-- Right Column -->
-                    <div>
+                    <div class="form-group">
+                        <label for="name" class="required">Nama Penuh *</label>
+                        <input type="text" 
+                               id="name" 
+                               name="name" 
+                               placeholder="Contoh: Ahmad bin Abdullah"
+                               required
+                               value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>">
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
-                            <label for="name" class="required">Full Name</label>
-                            <input type="text" 
-                                   id="name" 
-                                   name="name" 
-                                   value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>"
-                                   placeholder="e.g., Ali bin Ahmad"
-                                   required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="email">Email Address</label>
+                            <label for="email" class="required">Emel *</label>
                             <input type="email" 
                                    id="email" 
                                    name="email" 
-                                   value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>"
-                                   placeholder="optional@email.com">
-                            <div class="help-text">
-                                <i class="fas fa-envelope"></i>
-                                Optional - for notifications
-                            </div>
+                                   placeholder="Contoh: user@example.com"
+                                   required
+                                   value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
                         </div>
                         
                         <div class="form-group">
-                            <label for="role" class="required">User Role</label>
-                            <select id="role" name="role" required>
-                                <option value="">Select Role</option>
-                                <option value="admin" <?php echo ($_POST['role'] ?? '') == 'admin' ? 'selected' : ''; ?>>Admin</option>
-                                <option value="rankholder" <?php echo ($_POST['role'] ?? '') == 'rankholder' ? 'selected' : ''; ?>>Rankholder</option>
-                                <option value="cadet" <?php echo ($_POST['role'] ?? '') == 'cadet' ? 'selected' : ''; ?>>Cadet</option>
-                            </select>
-                            <div class="help-text">
-                                <i class="fas fa-user-tag"></i>
-                                Admin: System management, Rankholder: Supervisor, Cadet: Trainee
-                            </div>
+                            <label for="phone">Nombor Telefon</label>
+                            <input type="tel" 
+                                   id="phone" 
+                                   name="phone" 
+                                   placeholder="Contoh: 0123456789"
+                                   value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>">
                         </div>
                     </div>
-                </div>
-                
-                <!-- ROLE-SPECIFIC FIELDS (Hidden by default) -->
-                <div id="roleFields" class="role-fields">
-                    <h3 style="margin-bottom: 15px; color: var(--primary);">
-                        <i class="fas fa-id-card"></i> Service & Rank Information
-                    </h3>
+                    
+                    <div class="form-group">
+                        <label for="role" class="required">Peranan *</label>
+                        <select id="role" name="role" required>
+                            <option value="">Pilih Peranan</option>
+                            <?php foreach ($roleOptions as $value => $label): ?>
+                                <option value="<?php echo $value; ?>" <?php echo (isset($_POST['role']) && $_POST['role'] == $value) ? 'selected' : ''; ?>>
+                                    <?php echo $label; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="service_type" class="required">Service Type</label>
+                            <label for="service_type">Jenis Perkhidmatan</label>
                             <select id="service_type" name="service_type">
-                                <option value="">Select Service</option>
-                                <option value="darat" <?php echo ($_POST['service_type'] ?? '') == 'darat' ? 'selected' : ''; ?>>Angkatan Darat</option>
-                                <option value="laut" <?php echo ($_POST['service_type'] ?? '') == 'laut' ? 'selected' : ''; ?>>Angkatan Laut</option>
-                                <option value="udara" <?php echo ($_POST['service_type'] ?? '') == 'udara' ? 'selected' : ''; ?>>Angkatan Udara</option>
+                                <option value="">Pilih Jenis</option>
+                                <?php foreach ($serviceTypeOptions as $value => $label): ?>
+                                    <option value="<?php echo $value; ?>" <?php echo (isset($_POST['service_type']) && $_POST['service_type'] == $value) ? 'selected' : ''; ?>>
+                                        <?php echo $label; ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         
                         <div class="form-group">
-                            <label for="rank_level" class="required">Rank Level</label>
+                            <label for="rank_level">Tahap Pangkat</label>
                             <select id="rank_level" name="rank_level">
-                                <option value="">Select Rank</option>
-                                <option value="junior" <?php echo ($_POST['rank_level'] ?? '') == 'junior' ? 'selected' : ''; ?>>Junior</option>
-                                <option value="intermediate" <?php echo ($_POST['rank_level'] ?? '') == 'intermediate' ? 'selected' : ''; ?>>Intermediate</option>
-                                <option value="senior" <?php echo ($_POST['rank_level'] ?? '') == 'senior' ? 'selected' : ''; ?>>Senior</option>
+                                <option value="">Pilih Tahap</option>
+                                <?php foreach ($rankLevelOptions as $value => $label): ?>
+                                    <option value="<?php echo $value; ?>" <?php echo (isset($_POST['rank_level']) && $_POST['rank_level'] == $value) ? 'selected' : ''; ?>>
+                                        <?php echo $label; ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                     </div>
-                    <div class="help-text">
-                        <i class="fas fa-exclamation-circle"></i>
-                        Required for Rankholder and Cadet roles only
+                    
+                    <div class="form-group">
+                        <label for="join_date">Tarikh Masuk</label>
+                        <input type="date" 
+                               id="join_date" 
+                               name="join_date"
+                               value="<?php echo isset($_POST['join_date']) ? htmlspecialchars($_POST['join_date']) : date('Y-m-d'); ?>">
                     </div>
-                </div>
-                
-                <!-- FORM ACTIONS -->
-                <div class="form-actions">
+                    
+                    <div class="form-group">
+                        <label for="profile_image">Gambar Profil</label>
+                        <input type="file" 
+                               id="profile_image" 
+                               name="profile_image" 
+                               accept="image/*">
+                        <span class="field-hint">
+                            <i class="fas fa-info-circle"></i> 
+                            Format: JPG, PNG, GIF (Maks: 2MB)
+                        </span>
+                    </div>
+                    
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-user-plus"></i> Register User
+                        <i class="fas fa-user-plus"></i> Daftar Pengguna
                     </button>
-                    <button type="reset" class="btn btn-secondary" id="resetBtn">
-                        <i class="fas fa-redo"></i> Clear Form
-                    </button>
-                    <a href="list_cadets.php" class="btn" style="background: var(--secondary); color: white;">
-                        <i class="fas fa-list"></i> View Cadet List
-                    </a>
+                </form>
+            </div>
+            
+            <!-- RIGHT: USER PREVIEW -->
+            <div class="preview-section">
+                <h2 class="section-title">
+                    <i class="fas fa-eye"></i> Paparan Pengguna
+                </h2>
+                
+                <div class="user-preview">
+                    <?php if ($registeredUser): ?>
+                        <!-- SUCCESS MESSAGE -->
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 10px;"></i>
+                            <h3 style="color: var(--success);">Pengguna Didaftarkan!</h3>
+                            <p>Berikan kredensial di bawah kepada pengguna:</p>
+                        </div>
+                        
+                        <!-- CREDENTIALS BOX -->
+                        <div class="credentials-box">
+                            <strong><i class="fas fa-key"></i> Kredensial Log Masuk:</strong>
+                            <div style="margin-top: 10px;">
+                                <div style="margin-bottom: 10px;">
+                                    <strong>Nombor Tentera:</strong>
+                                    <div style="font-family: monospace; font-size: 1.1rem; margin-top: 5px;">
+                                        <?php echo htmlspecialchars($registeredUser['military_number']); ?>
+                                    </div>
+                                    <button class="copy-btn" onclick="copyToClipboard('<?php echo htmlspecialchars($registeredUser['military_number']); ?>')">
+                                        <i class="fas fa-copy"></i> Salin
+                                    </button>
+                                </div>
+                                
+                                <div style="margin-bottom: 10px;">
+                                    <strong>Kata Laluan:</strong>
+                                    <div style="font-family: monospace; font-size: 1.1rem; margin-top: 5px;">
+                                        <?php echo htmlspecialchars($registeredUser['password']); ?>
+                                    </div>
+                                    <button class="copy-btn" onclick="copyToClipboard('<?php echo htmlspecialchars($registeredUser['password']); ?>')">
+                                        <i class="fas fa-copy"></i> Salin
+                                    </button>
+                                </div>
+                            </div>
+                            <small style="display: block; margin-top: 10px; opacity: 0.9;">
+                                <i class="fas fa-share-alt"></i> Kredensial telah disimpan ke fail untuk rujukan
+                            </small>
+                        </div>
+                        
+                        <!-- USER INFORMATION -->
+                        <div class="user-info">
+                            <div class="info-item">
+                                <span>ID Pengguna:</span>
+                                <strong>#<?php echo htmlspecialchars($registeredUser['user_id']); ?></strong>
+                            </div>
+                            <div class="info-item">
+                                <span>Nama:</span>
+                                <strong><?php echo htmlspecialchars($registeredUser['name']); ?></strong>
+                            </div>
+                            <div class="info-item">
+                                <span>Emel:</span>
+                                <strong><?php echo htmlspecialchars($registeredUser['email']); ?></strong>
+                            </div>
+                            <div class="info-item">
+                                <span>Peranan:</span>
+                                <strong><?php echo $roleOptions[$registeredUser['role']] ?? $registeredUser['role']; ?></strong>
+                            </div>
+                            <?php if ($registeredUser['service_type']): ?>
+                                <div class="info-item">
+                                    <span>Jenis Perkhidmatan:</span>
+                                    <strong><?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></strong>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($registeredUser['rank_level']): ?>
+                                <div class="info-item">
+                                    <span>Tahap Pangkat:</span>
+                                    <strong><?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></strong>
+                                </div>
+                            <?php endif; ?>
+                            <div class="info-item">
+                                <span>Didaftarkan pada:</span>
+                                <strong><?php echo date('d/m/Y H:i:s', strtotime($registeredUser['registered_at'])); ?></strong>
+                            </div>
+                        </div>
+                        
+                        <!-- ACTION BUTTONS -->
+                        <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                            <button onclick="printCredentials()" 
+                                    class="btn" style="background: var(--accent); color: white;">
+                                <i class="fas fa-print"></i> Cetak Kredensial
+                            </button>
+                            <button onclick="window.location.href='manage_users.php'" 
+                                    class="btn" style="background: var(--success); color: white;">
+                                <i class="fas fa-users"></i> Urus Pengguna
+                            </button>
+                            <button onclick="window.location.href='register_user.php'" 
+                                    class="btn" style="background: var(--secondary); color: white;">
+                                <i class="fas fa-user-plus"></i> Daftar Baru
+                            </button>
+                        </div>
+                        
+                    <?php else: ?>
+                        <div style="padding: 40px 20px; text-align: center; color: var(--secondary);">
+                            <i class="fas fa-user-plus" style="font-size: 3rem; opacity: 0.3; margin-bottom: 15px;"></i>
+                            <h3 style="margin-bottom: 10px;">Tiada Pengguna Didaftarkan</h3>
+                            <p>Isi borang di sebelah kiri untuk mendaftar pengguna baru</p>
+                            <small style="display: block; margin-top: 15px; color: #a0aec0;">
+                                <i class="fas fa-info-circle"></i> Kata laluan akan digenerasi automatik dan disimpan ke fail
+                            </small>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            </form>
+            </div>
+        </div>
+        
+        <!-- RECENT USERS -->
+        <div class="users-section">
+            <h2 class="section-title">
+                <i class="fas fa-history"></i> Pengguna Terkini
+            </h2>
+            
+            <?php if ($recentUsers && $recentUsers->num_rows > 0): ?>
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombor Tentera</th>
+                            <th>Nama</th>
+                            <th>Emel</th>
+                            <th>Peranan</th>
+                            <th>Jenis Perkhidmatan</th>
+                            <th>Tahap Pangkat</th>
+                            <th>Didaftarkan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php while($user = $recentUsers->fetch_assoc()): ?>
+                            <tr>
+                                <td>#<?php echo $user['user_id']; ?></td>
+                                <td>
+                                    <strong><?php echo htmlspecialchars($user['military_number']); ?></strong>
+                                </td>
+                                <td><?php echo htmlspecialchars($user['name']); ?></td>
+                                <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                <td>
+                                    <span class="role-badge role-<?php echo $user['role']; ?>">
+                                        <?php echo strtoupper($user['role']); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?php if ($user['service_type']): ?>
+                                        <?php echo $serviceTypeOptions[$user['service_type']] ?? $user['service_type']; ?>
+                                    <?php else: ?>
+                                        <span style="color: #a0aec0;">-</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if ($user['rank_level']): ?>
+                                        <?php echo $rankLevelOptions[$user['rank_level']] ?? $user['rank_level']; ?>
+                                    <?php else: ?>
+                                        <span style="color: #a0aec0;">-</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php echo date('d/m/Y', strtotime($user['created_at'])); ?>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div style="text-align: center; padding: 30px; color: var(--secondary);">
+                    <i class="fas fa-user-slash" style="font-size: 2rem; opacity: 0.3; margin-bottom: 10px;"></i>
+                    <p>Belum ada pengguna didaftarkan</p>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
     
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const roleSelect = document.getElementById('role');
-            const roleFields = document.getElementById('roleFields');
-            const serviceSelect = document.getElementById('service_type');
-            const rankSelect = document.getElementById('rank_level');
-            const passwordInput = document.getElementById('password');
-            const confirmPassword = document.getElementById('confirm_password');
-            const strengthMeter = document.getElementById('strengthMeter');
-            const passwordMatch = document.getElementById('passwordMatch');
-            
-            // Show/hide role-specific fields
-            function toggleRoleFields() {
-                if (roleSelect.value === 'rankholder' || roleSelect.value === 'cadet') {
-                    roleFields.style.display = 'block';
-                    serviceSelect.required = true;
-                    rankSelect.required = true;
-                } else {
-                    roleFields.style.display = 'none';
-                    serviceSelect.required = false;
-                    rankSelect.required = false;
-                    serviceSelect.value = '';
-                    rankSelect.value = '';
-                }
-            }
-            
-            roleSelect.addEventListener('change', toggleRoleFields);
-            
-            // Trigger change on page load if role is already selected
-            toggleRoleFields();
-            
-            // Password strength checker
-            passwordInput.addEventListener('input', function() {
-                const password = this.value;
-                let strength = 0;
-                
-                if (password.length >= 6) strength++;
-                if (password.length >= 8) strength++;
-                if (/[A-Z]/.test(password)) strength++;
-                if (/[0-9]/.test(password)) strength++;
-                if (/[^A-Za-z0-9]/.test(password)) strength++;
-                
-                strengthMeter.className = 'strength-meter';
-                if (strength === 0) {
-                    // Do nothing
-                } else if (strength <= 2) {
-                    strengthMeter.className = 'strength-meter strength-weak';
-                } else if (strength <= 3) {
-                    strengthMeter.className = 'strength-meter strength-medium';
-                } else {
-                    strengthMeter.className = 'strength-meter strength-strong';
-                }
+        // Copy to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Berjaya disalin!', 'success');
+            }).catch(err => {
+                // Fallback method
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showToast('Berjaya disalin!', 'success');
             });
-            
-            // Password confirmation checker
-            function checkPasswordMatch() {
-                if (passwordInput.value && confirmPassword.value) {
-                    if (passwordInput.value === confirmPassword.value) {
-                        passwordMatch.innerHTML = '<i class="fas fa-check" style="color: #48bb78;"></i> Passwords match';
-                        confirmPassword.style.borderColor = '#48bb78';
-                        return true;
-                    } else {
-                        passwordMatch.innerHTML = '<i class="fas fa-times" style="color: #f56565;"></i> Passwords do not match';
-                        confirmPassword.style.borderColor = '#f56565';
-                        return false;
-                    }
-                } else {
-                    passwordMatch.innerHTML = '';
-                    confirmPassword.style.borderColor = '#e2e8f0';
-                    return null;
-                }
-            }
-            
-            confirmPassword.addEventListener('input', checkPasswordMatch);
-            passwordInput.addEventListener('input', checkPasswordMatch);
-            
-            // Auto-generate military number suggestion based on role
-            roleSelect.addEventListener('change', function() {
-                const militaryNumberInput = document.getElementById('military_number');
-                if (!militaryNumberInput.value) {
-                    const prefix = this.value === 'admin' ? 'ADM' : 
-                                  this.value === 'rankholder' ? 'RH' : 'CD';
-                    
-                    // Generate timestamp-based number
-                    const timestamp = Date.now().toString().slice(-4);
-                    militaryNumberInput.value = prefix + timestamp;
-                }
-            });
-            
-            // Form validation
-            document.getElementById('registerForm').addEventListener('submit', function(e) {
-                let isValid = true;
-                const errorMessages = [];
-                
-                // Check password match
-                const passwordMatchResult = checkPasswordMatch();
-                if (passwordMatchResult === false) {
-                    errorMessages.push('Passwords do not match');
-                    isValid = false;
-                }
-                
-                // Check role-specific fields for rankholder/cadet
-                const role = roleSelect.value;
-                if ((role === 'rankholder' || role === 'cadet')) {
-                    if (!serviceSelect.value) {
-                        errorMessages.push('Service type is required for ' + role + ' role');
-                        isValid = false;
-                    }
-                    if (!rankSelect.value) {
-                        errorMessages.push('Rank level is required for ' + role + ' role');
-                        isValid = false;
-                    }
-                }
-                
-                // Check password strength
-                if (passwordInput.value.length < 6) {
-                    errorMessages.push('Password must be at least 6 characters');
-                    isValid = false;
-                }
-                
-                if (!isValid) {
-                    e.preventDefault();
-                    if (errorMessages.length > 0) {
-                        alert('Please fix the following errors:\n\n' + errorMessages.join('\n'));
-                    }
-                }
-            });
-            
-            // Reset button
-            document.getElementById('resetBtn').addEventListener('click', function(e) {
-                e.preventDefault();
-                if (confirm('Clear all form fields?')) {
-                    document.getElementById('registerForm').reset();
-                    roleFields.style.display = 'none';
-                    strengthMeter.className = 'strength-meter';
-                    passwordMatch.innerHTML = '';
-                    confirmPassword.style.borderColor = '#e2e8f0';
-                    serviceSelect.required = false;
-                    rankSelect.required = false;
-                }
-            });
-            
-            // Auto-focus first input
-            document.getElementById('military_number').focus();
-        });
-        
-        // Test database connection
-        function testDatabase() {
-            fetch('test_db.php')
-                .then(response => response.text())
-                .then(data => {
-                    alert('Database Test Result:\n' + data);
-                })
-                .catch(error => {
-                    alert('Database Test Failed:\n' + error);
-                });
         }
+        
+        // Print credentials
+        function printCredentials() {
+            <?php if ($registeredUser): ?>
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>CAAMS - Kredensial Pengguna</title>
+                    <style>
+                        body { font-family: Arial; padding: 20px; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 15px; }
+                        .credentials { background: #f0f0f0; padding: 15px; margin: 15px 0; border-radius: 5px; }
+                        .warning { background: #fff3cd; padding: 10px; border-radius: 5px; margin: 15px 0; }
+                        .info { margin: 10px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>CAAMS - Kredensial Log Masuk</h2>
+                        <p>Untuk: <?php echo htmlspecialchars($registeredUser['name']); ?></p>
+                    </div>
+                    
+                    <div class="info">
+                        <p><strong>ID Pengguna:</strong> #<?php echo $registeredUser['user_id']; ?></p>
+                        <p><strong>Didaftarkan pada:</strong> <?php echo date('d/m/Y H:i:s', strtotime($registeredUser['registered_at'])); ?></p>
+                    </div>
+                    
+                    <div class="credentials">
+                        <h3>Maklumat Log Masuk:</h3>
+                        <p><strong>URL Sistem:</strong> http://<?php echo $_SERVER['HTTP_HOST']; ?></p>
+                        <p><strong>Nombor Tentera:</strong> <?php echo htmlspecialchars($registeredUser['military_number']); ?></p>
+                        <p><strong>Kata Laluan:</strong> <?php echo htmlspecialchars($registeredUser['password']); ?></p>
+                    </div>
+                    
+                    <div class="warning">
+                        <h4><i class="fas fa-exclamation-triangle"></i> Arahan Penting:</h4>
+                        <ul>
+                            <li>Gunakan kredensial di atas untuk log masuk pertama</li>
+                            <li>Tukar kata laluan selepas log masuk pertama</li>
+                            <li>Jangan kongsikan kredensial dengan sesiapa</li>
+                            <li>Hubungi admin jika ada masalah log masuk</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="info">
+                        <p><small><i>Dicetak pada: <?php echo date('d/m/Y H:i:s'); ?></i></small></p>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+            <?php endif; ?>
+        }
+        
+        // Toast notification
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                background: ${type === 'success' ? '#48bb78' : '#f56565'};
+                color: white;
+                border-radius: 8px;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+                z-index: 1000;
+                animation: slideInRight 0.3s ease-out;
+            `;
+            
+            toast.innerHTML = `
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'}"></i>
+                ${message}
+            `;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOutRight 0.3s ease-out';
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+        
+        // Add CSS animations for toast
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOutRight {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Set join date to today on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const joinDateField = document.getElementById('join_date');
+            if (joinDateField && !joinDateField.value) {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                joinDateField.value = `${yyyy}-${mm}-${dd}`;
+            }
+        });
     </script>
 </body>
 </html>
