@@ -15,3 +15,8 @@ uploads/
 dist/
 build/
 
+# Database / local config (do not commit)
+caams_fyp.sql
+config/database.php
+phpqrcode.zip
+app/controllers/QRController.php.backup
