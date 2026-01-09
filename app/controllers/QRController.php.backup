@@ -1,0 +1,261 @@
+<?php
+// app/controllers/QRController.php
+require_once __DIR__ . '/../core/Database.php';
+require_once __DIR__ . '/../core/Session.php';
+
+class QRController extends Database {
+    
+    public function generateTrainingSession($data) {
+        // Validate required fields
+        if (empty($data['training_date']) || empty($data['training_type']) || empty($data['session_time'])) {
+            return [
+                'success' => false,
+                'message' => 'Tarikh, jenis latihan, dan sesi latihan adalah wajib'
+            ];
+        }
+        
+        // Validate FETIK requires additional notes
+        if ($data['training_type'] === 'FETIK' && empty($data['notes'])) {
+            return [
+                'success' => false,
+                'message' => 'Untuk FETIK, sila nyatakan butiran dalam catatan tambahan'
+            ];
+        }
+        
+        // Generate unique QR token
+        $qrToken = $this->generateQRToken();
+        
+        // Set expiration (1 minute from now)
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+1 minute'));
+        
+        // Insert into database - location can be empty or NULL
+        $sql = "INSERT INTO training_sessions 
+                (location, training_date, training_type, session_time, qr_token, created_by, expires_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)";
+        
+        $stmt = $this->prepare($sql);
+        $createdBy = Session::get('user_id');
+        
+        $stmt->bind_param(
+            "sssssis",
+            $data['location'],
+            $data['training_date'],
+            $data['training_type'],
+            $data['session_time'],
+            $qrToken,
+            $createdBy,
+            $expiresAt
+        );
+        
+        if ($stmt->execute()) {
+            $sessionId = $stmt->insert_id;
+            
+            // Generate QR code image
+            $qrData = json_encode([
+                'session_id' => $sessionId,
+                'token' => $qrToken,
+                'expires' => $expiresAt,
+                'session_time' => $data['session_time'],
+                'training_type' => $data['training_type']
+            ]);
+            
+            $qrPath = $this->generateQRImage($qrData, $sessionId);
+            
+            // Create activity description
+            $activityDesc = "Generated QR code for {$data['training_type']}";
+            if (!empty($data['location'])) {
+                $activityDesc .= " at {$data['location']}";
+            }
+            $activityDesc .= " (Sesi: {$data['session_time']})";
+            
+            // Log activity
+            $this->logActivity(
+                Session::get('user_id'),
+                'qr_generated',
+                $activityDesc,
+                $sessionId
+            );
+            
+            return [
+                'success' => true,
+                'message' => 'QR Code generated successfully!',
+                'session_id' => $sessionId,
+                'qr_token' => $qrToken,
+                'qr_path' => $qrPath,
+                'expires_at' => $expiresAt,
+                'location' => $data['location'],
+                'training_type' => $data['training_type'],
+                'session_time' => $data['session_time'],
+                'training_date' => $data['training_date'],
+                'notes' => $data['notes'] ?? ''
+            ];
+        } else {
+            return [
+                'success' => false,
+                'message' => 'Database error: ' . $stmt->error
+            ];
+        }
+    }
+    
+    public function refreshQRCode($sessionId) {
+        // Get current session
+        $sql = "SELECT * FROM training_sessions WHERE session_id = ?";
+        $stmt = $this->prepare($sql);
+        $stmt->bind_param("i", $sessionId);
+        $stmt->execute();
+        $session = $stmt->get_result()->fetch_assoc();
+        
+        if (!$session) {
+            return ['success' => false, 'message' => 'Session not found'];
+        }
+        
+        // Generate new token and expiration
+        $newToken = $this->generateQRToken();
+        $newExpires = date('Y-m-d H:i:s', strtotime('+1 minute'));
+        
+        // Update in database
+        $updateSql = "UPDATE training_sessions 
+                     SET qr_token = ?, expires_at = ? 
+                     WHERE session_id = ?";
+        $updateStmt = $this->prepare($updateSql);
+        $updateStmt->bind_param("ssi", $newToken, $newExpires, $sessionId);
+        
+        if ($updateStmt->execute()) {
+            // Generate new QR image
+            $qrData = json_encode([
+                'session_id' => $sessionId,
+                'token' => $newToken,
+                'expires' => $newExpires,
+                'session_time' => $session['session_time'],
+                'training_type' => $session['training_type']
+            ]);
+            
+            $qrPath = $this->generateQRImage($qrData, $sessionId);
+            
+            // Log activity
+            $this->logActivity(
+                Session::get('user_id'),
+                'qr_refreshed',
+                "Refreshed QR code for {$session['training_type']}",
+                $sessionId
+            );
+            
+            return [
+                'success' => true,
+                'message' => 'QR Code refreshed!',
+                'qr_token' => $newToken,
+                'qr_path' => $qrPath,
+                'expires_at' => $newExpires,
+                'session_id' => $sessionId
+            ];
+        } else {
+            return [
+                'success' => false,
+                'message' => 'Update failed: ' . $updateStmt->error
+            ];
+        }
+    }
+    
+    public function getActiveSessions() {
+        $sql = "SELECT ts.*, u.name as creator_name 
+                FROM training_sessions ts
+                JOIN users u ON ts.created_by = u.user_id
+                WHERE ts.expires_at > NOW()
+                ORDER BY ts.created_at DESC";
+        
+        $stmt = $this->prepare($sql);
+        $stmt->execute();
+        return $stmt->get_result();
+    }
+    
+    public function getExpiredSessions() {
+        $sql = "SELECT ts.*, u.name as creator_name 
+                FROM training_sessions ts
+                JOIN users u ON ts.created_by = u.user_id
+                WHERE ts.expires_at <= NOW()
+                ORDER BY ts.expires_at DESC
+                LIMIT 10";
+        
+        $stmt = $this->prepare($sql);
+        $stmt->execute();
+        return $stmt->get_result();
+    }
+    
+    public function validateQRToken($token) {
+        $sql = "SELECT * FROM training_sessions 
+                WHERE qr_token = ? AND expires_at > NOW()";
+        
+        $stmt = $this->prepare($sql);
+        $stmt->bind_param("s", $token);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        return $result->num_rows > 0 ? $result->fetch_assoc() : false;
+    }
+    
+    private function generateQRToken() {
+        return 'QR_' . time() . '_' . bin2hex(random_bytes(8));
+    }
+    
+    private function generateQRImage($data, $sessionId) {
+        // Create assets/qrcodes directory if not exists
+        $qrDir = __DIR__ . '/../../assets/qrcodes/';
+        if (!is_dir($qrDir)) {
+            mkdir($qrDir, 0755, true);
+        }
+        
+        $filename = "session_{$sessionId}_" . time() . ".png";
+        $filepath = $qrDir . $filename;
+        $webpath = "assets/qrcodes/{$filename}";
+        
+        // Generate QR code using the library
+        if (file_exists(__DIR__ . '/../../vendor/phpqrcode/qrlib.php')) {
+            require_once __DIR__ . '/../../vendor/phpqrcode/qrlib.php';
+            QRcode::png($data, $filepath, 'L', 10, 2);
+        } else {
+            // Fallback: create simple image
+            $this->createFallbackQR($filepath, $sessionId);
+        }
+        
+        return $webpath;
+    }
+    
+    private function createFallbackQR($filepath, $sessionId) {
+        // Simple image creation as fallback
+        $im = imagecreate(200, 200);
+        $bg = imagecolorallocate($im, 255, 255, 255);
+        $textcolor = imagecolorallocate($im, 0, 0, 0);
+        
+        // Draw simple QR-like pattern
+        for ($i = 0; $i < 100; $i++) {
+            $x = rand(10, 190);
+            $y = rand(10, 190);
+            $size = rand(2, 6);
+            imagefilledrectangle($im, $x, $y, $x+$size, $y+$size, $textcolor);
+        }
+        
+        // Add session ID text
+        imagestring($im, 3, 70, 90, "SESI", $textcolor);
+        imagestring($im, 5, 80, 110, "#$sessionId", $textcolor);
+        
+        imagepng($im, $filepath);
+        imagedestroy($im);
+    }
+    
+    private function logActivity($userId, $type, $description, $relatedId = null) {
+        // Check if activity_logs table exists
+        $checkTable = $this->prepare("SHOW TABLES LIKE 'activity_logs'");
+        $checkTable->execute();
+        
+        if ($checkTable->get_result()->num_rows > 0) {
+            $sql = "INSERT INTO activity_logs (user_id, activity_type, description, related_id, ip_address) 
+                    VALUES (?, ?, ?, ?, ?)";
+            
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+            $stmt = $this->prepare($sql);
+            $stmt->bind_param("issss", $userId, $type, $description, $relatedId, $ip);
+            @$stmt->execute();
+        }
+    }
+}
+?>

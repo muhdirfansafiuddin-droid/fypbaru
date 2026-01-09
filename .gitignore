@@ -1,0 +1,17 @@
+.DS_Store
+*.log
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment / secrets
+.env
+
+# Uploads (optional - only if you don't want to upload user files)
+uploads/
+
+# Build outputs (optional)
+dist/
+build/
+
