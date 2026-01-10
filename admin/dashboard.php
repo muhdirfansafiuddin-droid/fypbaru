@@ -9,6 +9,7 @@ require_once __DIR__ . '/../app/core/RBAC.php';
 require_once __DIR__ . '/../app/core/Auth.php';
 require_once __DIR__ . '/../app/core/Database.php';
 
+// Check permission
 RBAC::checkPermission('admin');
 $auth = new Auth();
 $user = $auth->getCurrentUser();
@@ -16,157 +17,280 @@ $db = new Database();
 
 // Helper function to format time
 function timeAgo($timestamp) {
-    if (empty($timestamp)) return "No data";
+    if (empty($timestamp) || $timestamp === null) return "Tiada data";
     
-    $time = strtotime($timestamp);
-    $timeDiff = time() - $time;
-    
-    if ($timeDiff < 60) {
-        return "Baru sahaja";
-    } elseif ($timeDiff < 3600) {
-        $mins = floor($timeDiff / 60);
-        return "$mins minit" . ($mins > 1 ? "" : "") . " lepas";
-    } elseif ($timeDiff < 86400) {
-        $hours = floor($timeDiff / 3600);
-        return "$hours jam" . ($hours > 1 ? "" : "") . " lepas";
-    } elseif ($timeDiff < 604800) {
-        $days = floor($timeDiff / 86400);
-        return "$days hari" . ($days > 1 ? "" : "") . " lepas";
-    } else {
-        return date('d M Y, h:i A', $time);
+    try {
+        $time = strtotime($timestamp);
+        if ($time === false) return "Tarikh tidak sah";
+        
+        $timeDiff = time() - $time;
+        
+        if ($timeDiff < 60) {
+            return "Baru sahaja";
+        } elseif ($timeDiff < 3600) {
+            $mins = floor($timeDiff / 60);
+            return "$mins minit" . ($mins > 1 ? "" : "") . " lepas";
+        } elseif ($timeDiff < 86400) {
+            $hours = floor($timeDiff / 3600);
+            return "$hours jam" . ($hours > 1 ? "" : "") . " lepas";
+        } elseif ($timeDiff < 604800) {
+            $days = floor($timeDiff / 86400);
+            return "$days hari" . ($days > 1 ? "" : "") . " lepas";
+        } else {
+            return date('d M Y, h:i A', $time);
+        }
+    } catch (Exception $e) {
+        return "Tarikh tidak sah";
     }
 }
 
-// Fetch statistics
-$stats = [];
+// Fetch statistics dengan error handling
+$stats = [
+    'cadets' => 0,
+    'sessions' => 0,
+    'pending_leaves' => 0,
+    'avg_attendance' => 0,
+    'attendance_today' => 0
+];
 
 // 1. Total cadets
-$sql1 = "SELECT COUNT(*) as total FROM users WHERE role = 'cadet'";
-$stmt1 = $db->prepare($sql1);
-$stmt1->execute();
-$result1 = $stmt1->get_result();
-$stats['cadets'] = $result1->fetch_assoc()['total'] ?? 0;
+try {
+    $sql1 = "SELECT COUNT(*) as total FROM users WHERE role = 'cadet'";
+    $stmt1 = $db->prepare($sql1);
+    if ($stmt1) {
+        $stmt1->execute();
+        $result1 = $stmt1->get_result();
+        $row1 = $result1->fetch_assoc();
+        $stats['cadets'] = $row1['total'] ?? 0;
+    }
+} catch (Exception $e) {
+    $stats['cadets'] = 0;
+}
 
 // 2. Total training sessions this month
-$sql2 = "SELECT COUNT(*) as total FROM training_sessions 
-        WHERE MONTH(training_date) = MONTH(CURRENT_DATE()) 
-        AND YEAR(training_date) = YEAR(CURRENT_DATE())";
-$stmt2 = $db->prepare($sql2);
-$stmt2->execute();
-$result2 = $stmt2->get_result();
-$stats['sessions'] = $result2->fetch_assoc()['total'] ?? 0;
+try {
+    $sql2 = "SELECT COUNT(*) as total FROM training_sessions 
+            WHERE MONTH(training_date) = MONTH(CURRENT_DATE()) 
+            AND YEAR(training_date) = YEAR(CURRENT_DATE()) 
+            AND is_active = 1";
+    $stmt2 = $db->prepare($sql2);
+    if ($stmt2) {
+        $stmt2->execute();
+        $result2 = $stmt2->get_result();
+        $row2 = $result2->fetch_assoc();
+        $stats['sessions'] = $row2['total'] ?? 0;
+    }
+} catch (Exception $e) {
+    $stats['sessions'] = 0;
+}
 
 // 3. Pending leave requests
-$sql3 = "SELECT COUNT(*) as total FROM attendance 
-        WHERE status = 'excused' AND checked_by IS NULL";
-$stmt3 = $db->prepare($sql3);
-$stmt3->execute();
-$result3 = $stmt3->get_result();
-$stats['pending_leaves'] = $result3->fetch_assoc()['total'] ?? 0;
+try {
+    $sql3 = "SELECT COUNT(*) as total FROM attendance 
+            WHERE is_leave = 1 AND (status = 'excused' OR status IS NULL) 
+            AND checked_by IS NULL";
+    $stmt3 = $db->prepare($sql3);
+    if ($stmt3) {
+        $stmt3->execute();
+        $result3 = $stmt3->get_result();
+        $row3 = $result3->fetch_assoc();
+        $stats['pending_leaves'] = $row3['total'] ?? 0;
+    }
+} catch (Exception $e) {
+    $stats['pending_leaves'] = 0;
+}
 
 // 4. Average attendance rate
-$sql4 = "SELECT AVG(attendance_rate) as avg FROM allowance_calculations 
-        WHERE month_year = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')";
-$stmt4 = $db->prepare($sql4);
-$stmt4->execute();
-$result4 = $stmt4->get_result();
-$stats['avg_attendance'] = $result4->fetch_assoc()['avg'] ?? 0;
+try {
+    $sql4 = "SELECT ROUND(AVG(attendance_rate), 1) as avg FROM allowance_calculations 
+            WHERE month_year = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')";
+    $stmt4 = $db->prepare($sql4);
+    if ($stmt4) {
+        $stmt4->execute();
+        $result4 = $stmt4->get_result();
+        $row4 = $result4->fetch_assoc();
+        $stats['avg_attendance'] = $row4['avg'] ?? 0;
+    }
+} catch (Exception $e) {
+    $stats['avg_attendance'] = 0;
+}
 
 // 5. Total attendance today
-$sql5 = "SELECT COUNT(*) as total FROM attendance 
-        WHERE DATE(date) = CURDATE() AND status = 'present'";
-$stmt5 = $db->prepare($sql5);
-$stmt5->execute();
-$result5 = $stmt5->get_result();
-$stats['attendance_today'] = $result5->fetch_assoc()['total'] ?? 0;
+try {
+    $sql5 = "SELECT COUNT(*) as total FROM attendance a
+            JOIN training_sessions ts ON a.session_id = ts.session_id
+            WHERE DATE(a.date) = CURDATE() 
+            AND a.status = 'present'
+            AND ts.training_date = CURDATE()";
+    $stmt5 = $db->prepare($sql5);
+    if ($stmt5) {
+        $stmt5->execute();
+        $result5 = $stmt5->get_result();
+        $row5 = $result5->fetch_assoc();
+        $stats['attendance_today'] = $row5['total'] ?? 0;
+    }
+} catch (Exception $e) {
+    $stats['attendance_today'] = 0;
+}
 
-// Fetch latest activities
+// Fetch latest activities dengan error handling
+$latestCadet = null;
+$latestSession = null;
+$latestAttendance = null;
+$latestLeave = null;
+$latestAllowance = null;
+
 // 1. Latest registered cadets
-$sql6 = "SELECT name, created_at FROM users 
-        WHERE role = 'cadet' 
-        ORDER BY created_at DESC LIMIT 1";
-$stmt6 = $db->prepare($sql6);
-$stmt6->execute();
-$latestCadet = $stmt6->get_result()->fetch_assoc();
+try {
+    $sql6 = "SELECT name, created_at FROM users 
+            WHERE role = 'cadet' 
+            ORDER BY created_at DESC LIMIT 1";
+    $stmt6 = $db->prepare($sql6);
+    if ($stmt6) {
+        $stmt6->execute();
+        $result6 = $stmt6->get_result();
+        $latestCadet = $result6->fetch_assoc();
+    }
+} catch (Exception $e) {
+    $latestCadet = null;
+}
 
 // 2. Latest training sessions
-$sql7 = "SELECT location, training_type, created_at 
-        FROM training_sessions 
-        ORDER BY created_at DESC LIMIT 1";
-$stmt7 = $db->prepare($sql7);
-$stmt7->execute();
-$latestSession = $stmt7->get_result()->fetch_assoc();
+try {
+    $sql7 = "SELECT location, training_type, created_at 
+            FROM training_sessions 
+            WHERE is_active = 1
+            ORDER BY created_at DESC LIMIT 1";
+    $stmt7 = $db->prepare($sql7);
+    if ($stmt7) {
+        $stmt7->execute();
+        $result7 = $stmt7->get_result();
+        $latestSession = $result7->fetch_assoc();
+    }
+} catch (Exception $e) {
+    $latestSession = null;
+}
 
 // 3. Latest attendance updates
-$sql8 = "SELECT a.recorded_at, u.name, ts.training_type, ts.location
-        FROM attendance a
-        JOIN users u ON a.user_id = u.user_id
-        JOIN training_sessions ts ON a.session_id = ts.session_id
-        WHERE a.checked_by IS NOT NULL
-        ORDER BY a.recorded_at DESC LIMIT 1";
-$stmt8 = $db->prepare($sql8);
-$stmt8->execute();
-$latestAttendance = $stmt8->get_result()->fetch_assoc();
+try {
+    $sql8 = "SELECT a.recorded_at, u.name, ts.training_type, ts.location
+            FROM attendance a
+            JOIN users u ON a.user_id = u.user_id
+            JOIN training_sessions ts ON a.session_id = ts.session_id
+            WHERE a.checked_by IS NOT NULL
+            ORDER BY a.recorded_at DESC LIMIT 1";
+    $stmt8 = $db->prepare($sql8);
+    if ($stmt8) {
+        $stmt8->execute();
+        $result8 = $stmt8->get_result();
+        $latestAttendance = $result8->fetch_assoc();
+    }
+} catch (Exception $e) {
+    $latestAttendance = null;
+}
 
 // 4. Latest leave approvals
-$sql9 = "SELECT a.reason, a.checked_at, u.name, a.status
-        FROM attendance a
-        JOIN users u ON a.user_id = u.user_id
-        WHERE a.status = 'excused' AND a.checked_by IS NOT NULL
-        ORDER BY a.checked_at DESC LIMIT 1";
-$stmt9 = $db->prepare($sql9);
-$stmt9->execute();
-$latestLeave = $stmt9->get_result()->fetch_assoc();
+try {
+    $sql9 = "SELECT a.reason, a.checked_at, u.name, a.status
+            FROM attendance a
+            JOIN users u ON a.user_id = u.user_id
+            WHERE a.status = 'excused' AND a.checked_by IS NOT NULL
+            ORDER BY a.checked_at DESC LIMIT 1";
+    $stmt9 = $db->prepare($sql9);
+    if ($stmt9) {
+        $stmt9->execute();
+        $result9 = $stmt9->get_result();
+        $latestLeave = $result9->fetch_assoc();
+    }
+} catch (Exception $e) {
+    $latestLeave = null;
+}
 
 // 5. Latest allowance calculations
-$sql10 = "SELECT ac.calculated_at, u.name, ac.total_amount 
-         FROM allowance_calculations ac
-         JOIN users u ON ac.user_id = u.user_id
-         ORDER BY ac.calculated_at DESC LIMIT 1";
-$stmt10 = $db->prepare($sql10);
-$stmt10->execute();
-$latestAllowance = $stmt10->get_result()->fetch_assoc();
+try {
+    $sql10 = "SELECT ac.calculated_at, u.name, ac.total_amount 
+             FROM allowance_calculations ac
+             JOIN users u ON ac.user_id = u.user_id
+             ORDER BY ac.calculated_at DESC LIMIT 1";
+    $stmt10 = $db->prepare($sql10);
+    if ($stmt10) {
+        $stmt10->execute();
+        $result10 = $stmt10->get_result();
+        $latestAllowance = $result10->fetch_assoc();
+    }
+} catch (Exception $e) {
+    $latestAllowance = null;
+}
 
 // Get service type distribution
-$serviceSql = "SELECT service_type, COUNT(*) as count FROM users WHERE role = 'cadet' AND service_type IS NOT NULL GROUP BY service_type";
-$serviceStmt = $db->prepare($serviceSql);
-$serviceStmt->execute();
-$serviceResult = $serviceStmt->get_result();
-$serviceStats = [];
-while($row = $serviceResult->fetch_assoc()) {
-    $serviceStats[$row['service_type']] = $row['count'];
+$serviceStats = ['darat' => 0, 'laut' => 0, 'udara' => 0];
+try {
+    $serviceSql = "SELECT service_type, COUNT(*) as count FROM users 
+                  WHERE role = 'cadet' AND service_type IS NOT NULL 
+                  AND service_type IN ('darat', 'laut', 'udara')
+                  GROUP BY service_type";
+    $serviceStmt = $db->prepare($serviceSql);
+    if ($serviceStmt) {
+        $serviceStmt->execute();
+        $serviceResult = $serviceStmt->get_result();
+        while($row = $serviceResult->fetch_assoc()) {
+            $serviceStats[$row['service_type']] = $row['count'];
+        }
+    }
+} catch (Exception $e) {
+    // Keep default values
 }
 
 // Get today's activities with full details
-$todayActivitiesSql = "SELECT ts.training_type, ts.location, ts.session_time, 
-                      ts.training_date, u.name as creator,
-                      (SELECT COUNT(*) FROM attendance a WHERE a.session_id = ts.session_id AND a.status = 'present') as present_count,
-                      (SELECT COUNT(*) FROM attendance a WHERE a.session_id = ts.session_id) as total_count
-                      FROM training_sessions ts
-                      JOIN users u ON ts.created_by = u.user_id
-                      WHERE DATE(ts.training_date) = CURDATE() 
-                      ORDER BY 
-                      CASE ts.session_time 
-                          WHEN 'pagi' THEN 1
-                          WHEN 'tengah hari' THEN 2
-                          WHEN 'petang' THEN 3
-                          WHEN 'malam' THEN 4
-                      END";
-$todayStmt = $db->prepare($todayActivitiesSql);
-$todayStmt->execute();
-$todayActivities = $todayStmt->get_result();
+$todayActivitiesResult = null;
+try {
+    $todayActivitiesSql = "SELECT ts.training_type, ts.location, ts.session_time, 
+                          ts.training_date, u.name as creator,
+                          (SELECT COUNT(*) FROM attendance a WHERE a.session_id = ts.session_id AND a.status = 'present') as present_count,
+                          (SELECT COUNT(*) FROM attendance a WHERE a.session_id = ts.session_id) as total_count
+                          FROM training_sessions ts
+                          JOIN users u ON ts.created_by = u.user_id
+                          WHERE DATE(ts.training_date) = CURDATE() 
+                          AND ts.is_active = 1
+                          ORDER BY 
+                          CASE ts.session_time 
+                              WHEN 'pagi' THEN 1
+                              WHEN 'tengah hari' THEN 2
+                              WHEN 'petang' THEN 3
+                              WHEN 'malam' THEN 4
+                          END";
+    $todayStmt = $db->prepare($todayActivitiesSql);
+    if ($todayStmt) {
+        $todayStmt->execute();
+        $todayActivitiesResult = $todayStmt->get_result();
+    }
+} catch (Exception $e) {
+    $todayActivitiesResult = null;
+}
 
 // Get pending actions count
 $pendingActions = 0;
 $pendingActions += $stats['pending_leaves'];
 
 // Check if there are attendance records pending verification
-$pendingAttendanceSql = "SELECT COUNT(*) as count FROM attendance WHERE checked_by IS NULL AND status != 'excused'";
-$pendingAttStmt = $db->prepare($pendingAttendanceSql);
-$pendingAttStmt->execute();
-$pendingAttResult = $pendingAttStmt->get_result();
-$pendingAttendance = $pendingAttResult->fetch_assoc()['count'] ?? 0;
-$pendingActions += $pendingAttendance;
+$pendingAttendance = 0;
+try {
+    $pendingAttendanceSql = "SELECT COUNT(*) as count FROM attendance a
+                            JOIN training_sessions ts ON a.session_id = ts.session_id
+                            WHERE a.checked_by IS NULL 
+                            AND a.status != 'excused' 
+                            AND DATE(ts.training_date) <= CURDATE()";
+    $pendingAttStmt = $db->prepare($pendingAttendanceSql);
+    if ($pendingAttStmt) {
+        $pendingAttStmt->execute();
+        $pendingAttResult = $pendingAttStmt->get_result();
+        $pendingRow = $pendingAttResult->fetch_assoc();
+        $pendingAttendance = $pendingRow['count'] ?? 0;
+        $pendingActions += $pendingAttendance;
+    }
+} catch (Exception $e) {
+    $pendingAttendance = 0;
+}
 
 // Format numbers
 function formatNumber($num) {
@@ -174,6 +298,16 @@ function formatNumber($num) {
         return number_format($num / 1000, 1) . 'K';
     }
     return $num;
+}
+
+// Safe display function
+function safeDisplay($value, $default = 'Tiada data') {
+    return !empty($value) ? htmlspecialchars($value) : $default;
+}
+
+// Safe number format
+function safeNumber($value, $decimals = 0) {
+    return is_numeric($value) ? number_format($value, $decimals) : '0';
 }
 ?>
 <!DOCTYPE html>
@@ -184,6 +318,8 @@ function formatNumber($num) {
     <title>Admin Dashboard - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* PASTE SEMUA CSS ANDA YANG SAMA DI SINI */
+        /* CSS TIDAK DIUBAH - SAMA SEPERTI SEBELUM */
         :root {
             --primary: #1a365d;
             --secondary: #2d3748;
@@ -747,8 +883,8 @@ function formatNumber($num) {
             
             <div class="user-info">
                 <div class="user-details">
-                    <h3>Welcome, <?php echo htmlspecialchars($user['name']); ?></h3>
-                    <p>Admin ID: <?php echo htmlspecialchars($user['military_number']); ?> | Role: Administrator</p>
+                    <h3>Welcome, <?php echo safeDisplay($user['name'] ?? 'Admin'); ?></h3>
+                    <p>Admin ID: <?php echo safeDisplay($user['military_number'] ?? 'ADMIN001'); ?> | Role: Administrator</p>
                     <p style="font-size: 0.8rem; opacity: 0.7; margin-top: 5px;">
                         <i class="far fa-calendar"></i> <?php echo date('l, d F Y'); ?>
                     </p>
@@ -765,7 +901,7 @@ function formatNumber($num) {
                 <div class="stat-icon">
                     <i class="fas fa-users"></i>
                 </div>
-                <div class="stat-number"><?php echo $stats['cadets']; ?></div>
+                <div class="stat-number"><?php echo safeNumber($stats['cadets']); ?></div>
                 <div class="stat-label">Total Kadet</div>
             </div>
             
@@ -773,7 +909,7 @@ function formatNumber($num) {
                 <div class="stat-icon">
                     <i class="fas fa-calendar-alt"></i>
                 </div>
-                <div class="stat-number"><?php echo $stats['sessions']; ?></div>
+                <div class="stat-number"><?php echo safeNumber($stats['sessions']); ?></div>
                 <div class="stat-label">Sesi Bulan Ini</div>
             </div>
             
@@ -781,7 +917,7 @@ function formatNumber($num) {
                 <div class="stat-icon">
                     <i class="fas fa-clock"></i>
                 </div>
-                <div class="stat-number"><?php echo $pendingActions; ?></div>
+                <div class="stat-number"><?php echo safeNumber($pendingActions); ?></div>
                 <div class="stat-label">Tindakan Tunggu</div>
             </div>
             
@@ -789,7 +925,7 @@ function formatNumber($num) {
                 <div class="stat-icon">
                     <i class="fas fa-clipboard-check"></i>
                 </div>
-                <div class="stat-number"><?php echo $stats['attendance_today']; ?></div>
+                <div class="stat-number"><?php echo safeNumber($stats['attendance_today']); ?></div>
                 <div class="stat-label">Kehadiran Hari Ini</div>
             </div>
             
@@ -797,7 +933,7 @@ function formatNumber($num) {
                 <div class="stat-icon">
                     <i class="fas fa-chart-line"></i>
                 </div>
-                <div class="stat-number"><?php echo number_format($stats['avg_attendance'], 1); ?>%</div>
+                <div class="stat-number"><?php echo safeNumber($stats['avg_attendance'], 1); ?>%</div>
                 <div class="stat-label">Purata Kehadiran</div>
             </div>
         </div>
@@ -881,8 +1017,8 @@ function formatNumber($num) {
                     </div>
                     
                     <div class="activity-list">
-                        <?php if ($todayActivities->num_rows > 0): 
-                            while($activity = $todayActivities->fetch_assoc()): 
+                        <?php if ($todayActivitiesResult && $todayActivitiesResult->num_rows > 0): 
+                            while($activity = $todayActivitiesResult->fetch_assoc()): 
                                 $sessionLabels = [
                                     'pagi' => 'Pagi (06:00-10:00)',
                                     'tengah hari' => 'Tengah Hari (10:00-14:00)',
@@ -897,7 +1033,7 @@ function formatNumber($num) {
                         <div class="activity-card">
                             <div class="activity-header">
                                 <div class="activity-title">
-                                    <?php echo htmlspecialchars($activity['training_type']); ?>
+                                    <?php echo safeDisplay($activity['training_type']); ?>
                                 </div>
                                 <div class="activity-time-badge">
                                     <?php echo $sessionLabels[$activity['session_time']] ?? ucfirst($activity['session_time']); ?>
@@ -907,26 +1043,26 @@ function formatNumber($num) {
                             <div class="activity-details">
                                 <span class="activity-location">
                                     <i class="fas fa-map-marker-alt"></i> 
-                                    <?php echo htmlspecialchars($activity['location']); ?>
+                                    <?php echo safeDisplay($activity['location']); ?>
                                 </span>
                                 <span class="activity-creator">
                                     <i class="fas fa-user-tie"></i> 
-                                    <?php echo htmlspecialchars($activity['creator']); ?>
+                                    <?php echo safeDisplay($activity['creator']); ?>
                                 </span>
                             </div>
                             
                             <div class="activity-stats">
                                 <div class="stat-pill">
                                     <i class="fas fa-user-check"></i>
-                                    <?php echo $activity['present_count']; ?> hadir
+                                    <?php echo safeNumber($activity['present_count']); ?> hadir
                                 </div>
                                 <div class="stat-pill">
                                     <i class="fas fa-users"></i>
-                                    <?php echo $activity['total_count']; ?> total
+                                    <?php echo safeNumber($activity['total_count']); ?> total
                                 </div>
                                 <div class="stat-pill" style="color: var(--accent); font-weight: 600;">
                                     <i class="fas fa-chart-line"></i>
-                                    <?php echo $attendancePercent; ?>%
+                                    <?php echo safeNumber($attendancePercent, 1); ?>%
                                 </div>
                             </div>
                         </div>
@@ -961,14 +1097,14 @@ function formatNumber($num) {
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestCadet): ?>
-                                    Kadet <strong><?php echo htmlspecialchars($latestCadet['name']); ?></strong> didaftarkan
+                                    Kadet <strong><?php echo safeDisplay($latestCadet['name']); ?></strong> didaftarkan
                                 <?php else: ?>
                                     Tiada kadet didaftarkan
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
                                 <i class="far fa-clock"></i>
-                                <?php echo $latestCadet ? timeAgo($latestCadet['created_at']) : 'No data'; ?>
+                                <?php echo timeAgo($latestCadet['created_at'] ?? null); ?>
                             </p>
                         </div>
                     </div>
@@ -981,9 +1117,9 @@ function formatNumber($num) {
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestSession): ?>
-                                    Sesi <strong><?php echo htmlspecialchars($latestSession['training_type']); ?></strong>
+                                    Sesi <strong><?php echo safeDisplay($latestSession['training_type']); ?></strong>
                                     <?php if ($latestSession['location']): ?>
-                                        di <strong><?php echo htmlspecialchars($latestSession['location']); ?></strong>
+                                        di <strong><?php echo safeDisplay($latestSession['location']); ?></strong>
                                     <?php endif; ?>
                                     dijana
                                 <?php else: ?>
@@ -992,7 +1128,7 @@ function formatNumber($num) {
                             </h4>
                             <p class="activity-time">
                                 <i class="far fa-clock"></i>
-                                <?php echo $latestSession ? timeAgo($latestSession['created_at']) : 'No data'; ?>
+                                <?php echo timeAgo($latestSession['created_at'] ?? null); ?>
                             </p>
                         </div>
                     </div>
@@ -1005,9 +1141,9 @@ function formatNumber($num) {
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestAttendance): ?>
-                                    Kehadiran <strong><?php echo htmlspecialchars($latestAttendance['name']); ?></strong> 
+                                    Kehadiran <strong><?php echo safeDisplay($latestAttendance['name']); ?></strong> 
                                     <?php if ($latestAttendance['training_type']): ?>
-                                        untuk <strong><?php echo htmlspecialchars($latestAttendance['training_type']); ?></strong>
+                                        untuk <strong><?php echo safeDisplay($latestAttendance['training_type']); ?></strong>
                                     <?php endif; ?>
                                     dikemas kini
                                 <?php else: ?>
@@ -1016,7 +1152,7 @@ function formatNumber($num) {
                             </h4>
                             <p class="activity-time">
                                 <i class="far fa-clock"></i>
-                                <?php echo $latestAttendance ? timeAgo($latestAttendance['recorded_at']) : 'No data'; ?>
+                                <?php echo timeAgo($latestAttendance['recorded_at'] ?? null); ?>
                             </p>
                         </div>
                     </div>
@@ -1029,9 +1165,9 @@ function formatNumber($num) {
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestLeave): ?>
-                                    Pelepasan <strong><?php echo htmlspecialchars($latestLeave['name']); ?></strong> diluluskan
+                                    Pelepasan <strong><?php echo safeDisplay($latestLeave['name']); ?></strong> diluluskan
                                     <?php if ($latestLeave['reason']): ?>
-                                        <br><small><?php echo htmlspecialchars(substr($latestLeave['reason'], 0, 50)); ?><?php echo strlen($latestLeave['reason']) > 50 ? '...' : ''; ?></small>
+                                        <br><small><?php echo safeDisplay(substr($latestLeave['reason'], 0, 50)); ?><?php echo strlen($latestLeave['reason']) > 50 ? '...' : ''; ?></small>
                                     <?php endif; ?>
                                 <?php else: ?>
                                     Tiada pelepasan diluluskan
@@ -1039,7 +1175,7 @@ function formatNumber($num) {
                             </h4>
                             <p class="activity-time">
                                 <i class="far fa-clock"></i>
-                                <?php echo $latestLeave ? timeAgo($latestLeave['checked_at']) : 'No data'; ?>
+                                <?php echo timeAgo($latestLeave['checked_at'] ?? null); ?>
                             </p>
                         </div>
                     </div>
@@ -1052,15 +1188,15 @@ function formatNumber($num) {
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestAllowance): ?>
-                                    Elaun <strong><?php echo htmlspecialchars($latestAllowance['name']); ?></strong> dikira: 
-                                    <strong>RM <?php echo number_format($latestAllowance['total_amount'], 2); ?></strong>
+                                    Elaun <strong><?php echo safeDisplay($latestAllowance['name']); ?></strong> dikira: 
+                                    <strong>RM <?php echo safeNumber($latestAllowance['total_amount'] ?? 0, 2); ?></strong>
                                 <?php else: ?>
                                     Tiada elaun dikira
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
                                 <i class="far fa-clock"></i>
-                                <?php echo $latestAllowance ? timeAgo($latestAllowance['calculated_at']) : 'No data'; ?>
+                                <?php echo timeAgo($latestAllowance['calculated_at'] ?? null); ?>
                             </p>
                         </div>
                     </div>
@@ -1081,7 +1217,7 @@ function formatNumber($num) {
                                 <div class="service-badge service-darat"></div>
                                 <span class="service-label">Darat</span>
                             </div>
-                            <div class="service-count"><?php echo $serviceStats['darat'] ?? 0; ?></div>
+                            <div class="service-count"><?php echo safeNumber($serviceStats['darat']); ?></div>
                         </div>
                         
                         <div class="service-item">
@@ -1089,7 +1225,7 @@ function formatNumber($num) {
                                 <div class="service-badge service-laut"></div>
                                 <span class="service-label">Laut</span>
                             </div>
-                            <div class="service-count"><?php echo $serviceStats['laut'] ?? 0; ?></div>
+                            <div class="service-count"><?php echo safeNumber($serviceStats['laut']); ?></div>
                         </div>
                         
                         <div class="service-item">
@@ -1097,7 +1233,7 @@ function formatNumber($num) {
                                 <div class="service-badge service-udara"></div>
                                 <span class="service-label">Udara</span>
                             </div>
-                            <div class="service-count"><?php echo $serviceStats['udara'] ?? 0; ?></div>
+                            <div class="service-count"><?php echo safeNumber($serviceStats['udara']); ?></div>
                         </div>
                     </div>
                 </div>

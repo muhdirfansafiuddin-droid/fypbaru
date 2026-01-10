@@ -1,19 +1,23 @@
 <?php
 // create_hash.php
-$password = 'password123';
-$hash = password_hash($password, PASSWORD_DEFAULT);
-echo "Password: " . $password . "<br>";
-echo "Hash: " . $hash . "<br>";
-echo "Length: " . strlen($hash) . "<br>";
-
-// Test verify
-if (password_verify($password, $hash)) {
-    echo "✓ Password verify SUCCESS";
+if (isset($_GET['password'])) {
+    $password = $_GET['password'];
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    
+    echo "Password: $password\n";
+    echo "Hash: $hash\n";
+    echo "\nVerify test:\n";
+    
+    // Test verify
+    if (password_verify($password, $hash)) {
+        echo "✓ Password verification successful!\n";
+    } else {
+        echo "✗ Password verification failed!\n";
+    }
+    
+    echo "\nSQL for insertion:\n";
+    echo "INSERT INTO users (password) VALUES ('$hash');";
 } else {
-    echo "✗ Password verify FAILED";
+    echo "Usage: create_hash.php?password=yourpassword";
 }
-
-// Update query
-echo "<br><br>SQL UPDATE QUERY:<br>";
-echo "UPDATE users SET password = '" . $hash . "' WHERE military_number = 'ADM001';";
 ?>
