@@ -1,5 +1,5 @@
 <?php
-// admin/jana_aktiviti.php
+// admin/jana_aktiviti.php - FIXED VERSION (NO QR)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -32,47 +32,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_activity'])) {
         $message = 'Tarikh, jenis latihan, dan sesi latihan adalah wajib';
         $messageType = 'error';
     } else {
-        // Generate unique token untuk activity
-        $activityToken = 'ACT_' . time() . '_' . bin2hex(random_bytes(8));
-        
-        // Insert into training_sessions
+        // Insert into training_sessions (TANPA QR_TOKEN)
         $sql = "INSERT INTO training_sessions 
-                (location, training_date, training_type, session_time, qr_token, created_by, expires_at, is_active) 
+                (location, training_date, training_type, session_time, max_attendance, notes, created_by, is_active) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $db->prepare($sql);
         $createdBy = $user['user_id'];
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+24 hours'));
         $isActive = 1;
         
         $stmt->bind_param(
-            "sssssisi",
+            "ssssissi",
             $formData['location'],
             $formData['training_date'],
             $formData['training_type'],
             $formData['session_time'],
-            $activityToken,
+            $formData['max_attendance'],
+            $formData['notes'],
             $createdBy,
-            $expiresAt,
             $isActive
         );
         
         if ($stmt->execute()) {
             $sessionId = $stmt->insert_id;
             
-            // Create activity URL untuk rankholder
+            // Create activity URL untuk rankholder (TANPA TOKEN)
             $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'];
-            $attendanceUrl = $baseUrl . "/rankholder/take_attendance.php?activity=" . $sessionId;
+            $attendanceUrl = $baseUrl . "/rankholder/take_attendance.php?session=" . $sessionId;
             
             // Log activity
             $activityDesc = "Created activity: {$formData['training_type']} at {$formData['location']}";
             $logSql = "INSERT INTO activity_logs (user_id, activity_type, description, related_id) 
-                      VALUES (?, 'activity_created', ?, ?)";
+                      VALUES (?, 'session_created', ?, ?)";
             $logStmt = $db->prepare($logSql);
             $logStmt->bind_param("isi", $user['user_id'], $activityDesc, $sessionId);
             $logStmt->execute();
             
-            $message = 'Aktiviti berjaya dicipta! Rankholder boleh akses melalui link di bawah.';
+            $message = 'Aktiviti berjaya dicipta!';
             $messageType = 'success';
             
             $createdActivity = [
@@ -82,7 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_activity'])) {
                 'training_date' => $formData['training_date'],
                 'session_time' => $formData['session_time'],
                 'attendance_url' => $attendanceUrl,
-                'activity_token' => $activityToken,
+                'max_attendance' => $formData['max_attendance'],
+                'notes' => $formData['notes'],
                 'created_at' => date('Y-m-d H:i:s')
             ];
         } else {
@@ -112,6 +109,13 @@ $trainingTypes = [
     'Perbarisan Merdeka',
     'Baris Rabu',
     'FETIK'
+];
+
+// Service types
+$serviceTypes = [
+    'darat' => 'Darat',
+    'laut' => 'Laut',
+    'udara' => 'Udara'
 ];
 
 // Session time labels
@@ -422,6 +426,19 @@ $sessionTimeLabels = [
                 flex-direction: column;
             }
         }
+        
+        /* FORM GRID */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -429,12 +446,12 @@ $sessionTimeLabels = [
         <!-- HEADER -->
         <div class="header">
             <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                <i class="fas fa-arrow-left"></i> Kembali ke Dashboard
             </a>
             <h1>
                 <i class="fas fa-calendar-plus"></i> Jana Aktiviti
             </h1>
-            <p style="opacity: 0.8; margin-top: 5px;">Cipta aktiviti latihan untuk rankholder ambil kehadiran</p>
+            <p style="opacity: 0.8; margin-top: 5px;">Cipta aktiviti latihan untuk kadet</p>
         </div>
         
         <!-- INFORMATION ALERT -->
@@ -443,9 +460,7 @@ $sessionTimeLabels = [
             <div>
                 <strong>Cara penggunaan:</strong> 
                 1. Isi maklumat aktiviti → 
-                2. Dapatkan link → 
-                3. Berikan link kepada rankholder → 
-                4. Rankholder isi kehadiran kadet
+                2. Aktiviti akan tersedia untuk rankholder ambil kehadiran
             </div>
         </div>
         
@@ -471,16 +486,29 @@ $sessionTimeLabels = [
                 <form method="POST" action="" id="activityForm">
                     <input type="hidden" name="create_activity" value="1">
                     
-                    <div class="form-group">
-                        <label for="training_type">Jenis Latihan *</label>
-                        <select id="training_type" name="training_type" required>
-                            <option value="">Pilih Jenis Latihan</option>
-                            <?php foreach ($trainingTypes as $type): ?>
-                                <option value="<?php echo htmlspecialchars($type); ?>">
-                                    <?php echo htmlspecialchars($type); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="training_type">Jenis Latihan *</label>
+                            <select id="training_type" name="training_type" required>
+                                <option value="">Pilih Jenis Latihan</option>
+                                <?php foreach ($trainingTypes as $type): ?>
+                                    <option value="<?php echo htmlspecialchars($type); ?>">
+                                        <?php echo htmlspecialchars($type); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="session_time">Sesi Latihan *</label>
+                            <select id="session_time" name="session_time" required>
+                                <option value="">Pilih Sesi</option>
+                                <option value="pagi">Pagi (06:00 - 10:00)</option>
+                                <option value="tengah hari">Tengah Hari (10:00 - 14:00)</option>
+                                <option value="petang">Petang (14:00 - 18:00)</option>
+                                <option value="malam">Malam (18:00 - 22:00)</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -488,42 +516,30 @@ $sessionTimeLabels = [
                         <input type="text" 
                                id="location" 
                                name="location" 
-                               placeholder="Contoh: Padang Kawad, Dewan Utama"
+                               placeholder="Contoh: Padang Kawad, Dewan Utama, Kelas 1, dll"
                                required>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="training_date">Tarikh Latihan *</label>
-                        <input type="date" 
-                               id="training_date" 
-                               name="training_date" 
-                               value="<?php echo date('Y-m-d'); ?>"
-                               required
-                               min="<?php echo date('Y-m-d'); ?>">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="session_time">Sesi Latihan *</label>
-                        <select id="session_time" name="session_time" required>
-                            <option value="">Pilih Sesi</option>
-                            <option value="pagi">Pagi (06:00 - 10:00)</option>
-                            <option value="tengah hari">Tengah Hari (10:00 - 14:00)</option>
-                            <option value="petang">Petang (14:00 - 18:00)</option>
-                            <option value="malam">Malam (18:00 - 22:00)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="max_attendance">Had Kehadiran (Pilihan)</label>
-                        <input type="number" 
-                               id="max_attendance" 
-                               name="max_attendance" 
-                               placeholder="Contoh: 50 (kosongkan untuk tiada had)"
-                               min="1" 
-                               max="500">
-                        <small style="color: #718096; font-size: 0.85rem; display: block; margin-top: 5px;">
-                            <i class="fas fa-info-circle"></i> Biar kosong jika tiada had kehadiran
-                        </small>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="training_date">Tarikh Latihan *</label>
+                            <input type="date" 
+                                   id="training_date" 
+                                   name="training_date" 
+                                   value="<?php echo date('Y-m-d'); ?>"
+                                   required
+                                   min="<?php echo date('Y-m-d'); ?>">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="max_attendance">Had Kehadiran (Pilihan)</label>
+                            <input type="number" 
+                                   id="max_attendance" 
+                                   name="max_attendance" 
+                                   placeholder="Contoh: 50 (kosongkan untuk tiada had)"
+                                   min="1" 
+                                   max="500">
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -531,7 +547,10 @@ $sessionTimeLabels = [
                         <textarea id="notes" 
                                   name="notes" 
                                   rows="3" 
-                                  placeholder="Arahan khas, peralatan diperlukan, dll..."></textarea>
+                                  placeholder="Arahan khas, peralatan diperlukan, pakaian seragam, dll..."></textarea>
+                        <small style="color: #718096; font-size: 0.85rem; display: block; margin-top: 5px;">
+                            <i class="fas fa-info-circle"></i> Catatan ini akan dipaparkan kepada rankholder
+                        </small>
                     </div>
                     
                     <button type="submit" class="btn btn-primary">
@@ -551,26 +570,8 @@ $sessionTimeLabels = [
                         <!-- SUCCESS MESSAGE -->
                         <div style="text-align: center; margin-bottom: 20px;">
                             <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 10px;"></i>
-                            <h3 style="color: var(--success);">Aktiviti Dicipta!</h3>
-                            <p>Rankholder boleh akses melalui link di bawah:</p>
-                        </div>
-                        
-                        <!-- ATTENDANCE LINK -->
-                        <div class="link-box">
-                            <strong><i class="fas fa-link"></i> Link Ambil Kehadiran:</strong>
-                            <div style="margin-top: 8px;">
-                                <a href="<?php echo htmlspecialchars($createdActivity['attendance_url']); ?>" 
-                                   target="_blank" 
-                                   id="attendanceLink">
-                                    <?php echo htmlspecialchars($createdActivity['attendance_url']); ?>
-                                </a>
-                                <button class="copy-btn" onclick="copyToClipboard('<?php echo htmlspecialchars($createdActivity['attendance_url']); ?>')">
-                                    <i class="fas fa-copy"></i> Copy
-                                </button>
-                            </div>
-                            <small style="display: block; margin-top: 8px; color: #718096;">
-                                <i class="fas fa-share-alt"></i> Share link ini dengan rankholder
-                            </small>
+                            <h3 style="color: var(--success);">Aktiviti Berjaya Dicipta!</h3>
+                            <p>Rankholder boleh akses melalui:</p>
                         </div>
                         
                         <!-- ACTIVITY INFORMATION -->
@@ -596,28 +597,52 @@ $sessionTimeLabels = [
                                 <strong><?php echo $sessionTimeLabels[$createdActivity['session_time']] ?? $createdActivity['session_time']; ?></strong>
                             </div>
                             <div class="info-item">
-                                <span>Token:</span>
-                                <code><?php echo htmlspecialchars($createdActivity['activity_token']); ?></code>
+                                <span>Had Kehadiran:</span>
+                                <strong><?php echo $createdActivity['max_attendance'] ?: 'Tiada Had'; ?></strong>
                             </div>
+                            <?php if ($createdActivity['notes']): ?>
+                            <div class="info-item">
+                                <span>Catatan:</span>
+                                <strong><?php echo htmlspecialchars($createdActivity['notes']); ?></strong>
+                            </div>
+                            <?php endif; ?>
                             <div class="info-item">
                                 <span>Dicipta pada:</span>
                                 <strong><?php echo date('d/m/Y H:i:s', strtotime($createdActivity['created_at'])); ?></strong>
                             </div>
                         </div>
                         
+                        <!-- DIRECT ACCESS -->
+                        <div class="link-box">
+                            <strong><i class="fas fa-link"></i> Akses Langsung:</strong>
+                            <div style="margin-top: 8px;">
+                                <a href="<?php echo htmlspecialchars($createdActivity['attendance_url']); ?>" 
+                                   target="_blank" 
+                                   id="attendanceLink">
+                                    <?php echo htmlspecialchars($createdActivity['attendance_url']); ?>
+                                </a>
+                                <button class="copy-btn" onclick="copyToClipboard('<?php echo htmlspecialchars($createdActivity['attendance_url']); ?>')">
+                                    <i class="fas fa-copy"></i> Salin
+                                </button>
+                            </div>
+                            <small style="display: block; margin-top: 8px; color: #718096;">
+                                <i class="fas fa-share-alt"></i> Rankholder boleh terus akses link ini
+                            </small>
+                        </div>
+                        
                         <!-- ACTION BUTTONS -->
                         <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
                             <button onclick="copyToClipboard('<?php echo htmlspecialchars($createdActivity['attendance_url']); ?>')" 
                                     class="btn" style="background: var(--accent); color: white;">
-                                <i class="fas fa-copy"></i> Copy Link
+                                <i class="fas fa-copy"></i> Salin Link
                             </button>
                             <button onclick="window.open('<?php echo htmlspecialchars($createdActivity['attendance_url']); ?>', '_blank')" 
                                     class="btn" style="background: var(--success); color: white;">
-                                <i class="fas fa-external-link-alt"></i> Buka Link
+                                <i class="fas fa-external-link-alt"></i> Buka
                             </button>
-                            <button onclick="printActivity()" 
+                            <button onclick="window.location.href='dashboard.php'" 
                                     class="btn" style="background: var(--secondary); color: white;">
-                                <i class="fas fa-print"></i> Cetak
+                                <i class="fas fa-home"></i> Dashboard
                             </button>
                         </div>
                     <?php else: ?>
@@ -626,7 +651,7 @@ $sessionTimeLabels = [
                             <h3 style="margin-bottom: 10px;">Tiada Aktiviti Dicipta</h3>
                             <p>Isi borang di sebelah kiri untuk mencipta aktiviti baru</p>
                             <small style="display: block; margin-top: 15px; color: #a0aec0;">
-                                <i class="fas fa-info-circle"></i> Setiap aktiviti akan ada link khusus untuk rankholder
+                                <i class="fas fa-info-circle"></i> Aktiviti akan tersedia untuk rankholder ambil kehadiran
                             </small>
                         </div>
                     <?php endif; ?>
@@ -657,10 +682,8 @@ $sessionTimeLabels = [
                     <?php if ($recentActivities && $recentActivities->num_rows > 0): ?>
                         <?php while($activity = $recentActivities->fetch_assoc()): 
                             $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'];
-                            $attendanceUrl = $baseUrl . "/rankholder/take_attendance.php?activity=" . $activity['session_id'];
-                            $expireTime = strtotime($activity['expires_at']);
-                            $now = time();
-                            $isActive = $expireTime > $now && $activity['is_active'] == 1;
+                            $attendanceUrl = $baseUrl . "/rankholder/take_attendance.php?session=" . $activity['session_id'];
+                            $isActive = $activity['is_active'] == 1;
                         ?>
                             <tr>
                                 <td>#<?php echo $activity['session_id']; ?></td>
@@ -673,7 +696,7 @@ $sessionTimeLabels = [
                                 </td>
                                 <td>
                                     <span class="status-badge <?php echo $isActive ? 'status-active' : 'status-expired'; ?>">
-                                        <?php echo $isActive ? 'ACTIVE' : 'EXPIRED'; ?>
+                                        <?php echo $isActive ? 'AKTIF' : 'TAMAT'; ?>
                                     </span>
                                 </td>
                                 <td>
@@ -711,7 +734,7 @@ $sessionTimeLabels = [
         // Copy to clipboard
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                showToast('Link copied to clipboard!', 'success');
+                showToast('Link disalin!', 'success');
             }).catch(err => {
                 // Fallback method
                 const textArea = document.createElement('textarea');
@@ -720,60 +743,8 @@ $sessionTimeLabels = [
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                showToast('Link copied to clipboard!', 'success');
+                showToast('Link disalin!', 'success');
             });
-        }
-        
-        // Print activity
-        function printActivity() {
-            <?php if ($createdActivity): ?>
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(`
-                <html>
-                <head>
-                    <title>CAAMS - Aktiviti Latihan</title>
-                    <style>
-                        body { font-family: Arial; padding: 20px; }
-                        .header { text-align: center; margin-bottom: 20px; }
-                        .info { margin: 15px 0; }
-                        .link { word-break: break-all; font-size: 12px; background: #f0f0f0; padding: 10px; border-radius: 5px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h2>CAAMS - Aktiviti Latihan</h2>
-                        <p>Link Ambil Kehadiran untuk Rankholder</p>
-                    </div>
-                    
-                    <div class="info">
-                        <p><strong>Aktiviti ID:</strong> #<?php echo $createdActivity['session_id']; ?></p>
-                        <p><strong>Jenis Latihan:</strong> <?php echo htmlspecialchars($createdActivity['training_type']); ?></p>
-                        <p><strong>Tempat:</strong> <?php echo htmlspecialchars($createdActivity['location']); ?></p>
-                        <p><strong>Tarikh:</strong> <?php echo date('d/m/Y', strtotime($createdActivity['training_date'])); ?></p>
-                        <p><strong>Sesi:</strong> <?php echo $sessionTimeLabels[$createdActivity['session_time']] ?? $createdActivity['session_time']; ?></p>
-                    </div>
-                    
-                    <div class="info">
-                        <h3>Link Ambil Kehadiran:</h3>
-                        <div class="link"><?php echo htmlspecialchars($createdActivity['attendance_url']); ?></div>
-                        <p><small>Scan QR code atau berikan link ini kepada rankholder</small></p>
-                    </div>
-                    
-                    <div class="info">
-                        <p><strong>Arahan:</strong></p>
-                        <ol>
-                            <li>Rankholder buka link di atas</li>
-                            <li>Pilih aktiviti yang sesuai</li>
-                            <li>Isi nombor tentera kadet</li>
-                            <li>Kehadiran akan direkod automatik</li>
-                        </ol>
-                    </div>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
-            printWindow.print();
-            <?php endif; ?>
         }
         
         // View activity details
@@ -829,6 +800,46 @@ $sessionTimeLabels = [
         // Auto-select today's date
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('training_date').valueAsDate = new Date();
+        });
+        
+        // Form validation
+        document.getElementById('activityForm').addEventListener('submit', function(e) {
+            const trainingType = document.getElementById('training_type').value;
+            const location = document.getElementById('location').value;
+            const trainingDate = document.getElementById('training_date').value;
+            const sessionTime = document.getElementById('session_time').value;
+            
+            if (!trainingType) {
+                e.preventDefault();
+                showToast('Sila pilih jenis latihan', 'error');
+                return false;
+            }
+            
+            if (!location.trim()) {
+                e.preventDefault();
+                showToast('Sila masukkan tempat latihan', 'error');
+                return false;
+            }
+            
+            if (!trainingDate) {
+                e.preventDefault();
+                showToast('Sila pilih tarikh latihan', 'error');
+                return false;
+            }
+            
+            if (!sessionTime) {
+                e.preventDefault();
+                showToast('Sila pilih sesi latihan', 'error');
+                return false;
+            }
+            
+            // Show loading
+            const submitBtn = this.querySelector('.btn-primary');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mencipta...';
+            submitBtn.disabled = true;
+            
+            return true;
         });
     </script>
 </body>
