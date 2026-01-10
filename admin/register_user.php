@@ -1,14 +1,21 @@
 <?php
-// admin/register_user.php
+// admin/register_user.php - UPDATED VERSION
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-require_once __DIR__ . '/../includes/db_connect.php';
-require_once __DIR__ . '/../includes/auth.php';
+// GUNA CORE FILES YANG SAMA SEPERTI DASHBOARD
+require_once __DIR__ . '/../app/core/RBAC.php';
+require_once __DIR__ . '/../app/core/Auth.php';
+require_once __DIR__ . '/../app/core/Database.php';
 
-// Check admin authentication
-checkAdminAuth();
+// Check admin authentication menggunakan RBAC
+RBAC::checkPermission('admin');
+
+// Initialize
+$auth = new Auth();
+$user = $auth->getCurrentUser();
+$db = new Database();
 
 $message = '';
 $messageType = '';
@@ -22,9 +29,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
     $email = trim($_POST['email'] ?? '');
     $role = $_POST['role'] ?? '';
     $phone = trim($_POST['phone'] ?? '');
-    $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : date('Y-m-d');
-    $service_type = $_POST['service_type'] ?? NULL;
-    $rank_level = $_POST['rank_level'] ?? NULL;
+    
+    // For cadet only fields
+    $join_date = date('Y-m-d'); // Default untuk semua
+    $service_type = NULL;
+    $rank_level = NULL;
+    
+    // Hanya set untuk kadet sahaja
+    if ($role === 'cadet') {
+        $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : date('Y-m-d');
+        $service_type = $_POST['service_type'] ?? NULL;
+        $rank_level = $_POST['rank_level'] ?? NULL;
+    }
     
     // Validate required fields
     if (empty($military_number) || empty($name) || empty($email) || empty($role)) {
@@ -33,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
     } else {
         // Check if military number already exists
         $checkSql = "SELECT user_id FROM users WHERE military_number = ?";
-        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt = $db->prepare($checkSql);
         $checkStmt->bind_param("s", $military_number);
         $checkStmt->execute();
         
@@ -43,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
         } else {
             // Check if email already exists
             $emailCheckSql = "SELECT user_id FROM users WHERE email = ?";
-            $emailCheckStmt = $conn->prepare($emailCheckSql);
+            $emailCheckStmt = $db->prepare($emailCheckSql);
             $emailCheckStmt->bind_param("s", $email);
             $emailCheckStmt->execute();
             
@@ -80,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                     }
                 }
                 
-                // SIMPLE INSERT - hanya field wajib dan ada default value
+                // INSERT query
                 $sql = "INSERT INTO users (
                     military_number, 
                     password, 
@@ -94,12 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                     rank_level
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 
-                $stmt = $conn->prepare($sql);
+                $stmt = $db->prepare($sql);
                 
                 if ($stmt) {
-                    // Hanya 10 parameter sahaja
                     $stmt->bind_param(
-                        "ssssssssss", // 10 string parameters
+                        "ssssssssss",
                         $military_number,
                         $hashedPassword,
                         $role,
@@ -113,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                     );
                     
                     if ($stmt->execute()) {
-                        $userId = $stmt->insert_id;
+                        $userId = $db->lastInsertId();
                         
                         // Save credentials to file
                         $logDir = '../logs/';
@@ -130,8 +145,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                         $content .= "Email: " . $email . "\n";
                         $content .= "Password: " . $password . "\n";
                         $content .= "Role: " . $role . "\n";
-                        $content .= "Service Type: " . ($service_type ?: 'N/A') . "\n";
-                        $content .= "Rank Level: " . ($rank_level ?: 'N/A') . "\n";
+                        
+                        // Only show service and rank for cadet
+                        if ($role === 'cadet') {
+                            $content .= "Service Type: " . ($service_type ?: 'N/A') . "\n";
+                            $content .= "Rank Level: " . ($rank_level ?: 'N/A') . "\n";
+                        }
+                        
                         $content .= "Login URL: http://" . $_SERVER['HTTP_HOST'] . "\n";
                         $content .= "===========================\n\n";
                         
@@ -139,11 +159,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                         
                         // Log activity
                         $activityDesc = "Registered new user: {$name} ({$military_number}) as {$role}";
+                        
+                        // Use direct database connection for logging
+                        $logConn = $db->getConnection();
                         $logSql = "INSERT INTO activity_logs (user_id, activity_type, description, related_id) 
                                   VALUES (?, 'user_registered', ?, ?)";
-                        $logStmt = $conn->prepare($logSql);
-                        $logStmt->bind_param("isi", $_SESSION['user_id'], $activityDesc, $userId);
-                        $logStmt->execute();
+                        $logStmt = $logConn->prepare($logSql);
+                        if ($logStmt) {
+                            $logStmt->bind_param("isi", $_SESSION['user_id'], $activityDesc, $userId);
+                            $logStmt->execute();
+                        }
                         
                         $message = 'Pengguna berjaya didaftarkan! Kredensial telah disimpan untuk pengedaran manual.';
                         $messageType = 'success';
@@ -165,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                         error_log("Database Error: " . $stmt->error);
                     }
                 } else {
-                    $message = 'Failed to prepare statement: ' . $conn->error;
+                    $message = 'Failed to prepare statement: ' . $db->getConnection()->error;
                     $messageType = 'error';
                 }
             }
@@ -178,7 +203,8 @@ $sql = "SELECT user_id, military_number, name, email, role, service_type, rank_l
         FROM users 
         ORDER BY created_at DESC 
         LIMIT 10";
-$recentUsers = $conn->query($sql);
+$result = $db->query($sql);
+$recentUsers = $result ? $result : null;
 
 // Role options
 $roleOptions = [
@@ -187,14 +213,14 @@ $roleOptions = [
     'cadet' => 'Cadet'
 ];
 
-// Service type options
+// Service type options (for cadet only)
 $serviceTypeOptions = [
     'darat' => 'Darat',
     'laut' => 'Laut',
     'udara' => 'Udara'
 ];
 
-// Rank level options
+// Rank level options (for cadet only)
 $rankLevelOptions = [
     'junior' => 'Junior',
     'intermediate' => 'Intermediate',
@@ -513,6 +539,29 @@ $rankLevelOptions = [
         .field-hint i {
             margin-right: 5px;
         }
+        
+        /* HIDDEN FIELDS INITIALLY */
+        .cadet-fields {
+            display: none;
+            margin-top: 15px;
+            padding: 20px;
+            background: #f0f9ff;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent);
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* CADET ONLY LABEL */
+        .cadet-only {
+            color: var(--accent);
+            font-weight: 600;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -535,7 +584,8 @@ $rankLevelOptions = [
                 <strong>Cara penggunaan:</strong> 
                 1. Isi maklumat wajib → 
                 2. Kata laluan digenerasi automatik → 
-                3. Berikan kredensial kepada pengguna
+                3. Berikan kredensial kepada pengguna<br>
+                <strong>Nota:</strong> Maklumat servis, pangkat, dan tarikh masuk hanya untuk kadet sahaja
             </div>
         </div>
         
@@ -608,7 +658,7 @@ $rankLevelOptions = [
                     
                     <div class="form-group">
                         <label for="role" class="required">Peranan *</label>
-                        <select id="role" name="role" required>
+                        <select id="role" name="role" required onchange="toggleCadetFields()">
                             <option value="">Pilih Peranan</option>
                             <?php foreach ($roleOptions as $value => $label): ?>
                                 <option value="<?php echo $value; ?>" <?php echo (isset($_POST['role']) && $_POST['role'] == $value) ? 'selected' : ''; ?>>
@@ -616,44 +666,60 @@ $rankLevelOptions = [
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <span class="field-hint">
+                            <i class="fas fa-info-circle"></i> 
+                            Pilih "Cadet" untuk paparan maklumat tambahan
+                        </span>
                     </div>
                     
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="service_type">Jenis Perkhidmatan</label>
-                            <select id="service_type" name="service_type">
-                                <option value="">Pilih Jenis</option>
-                                <?php foreach ($serviceTypeOptions as $value => $label): ?>
-                                    <option value="<?php echo $value; ?>" <?php echo (isset($_POST['service_type']) && $_POST['service_type'] == $value) ? 'selected' : ''; ?>>
-                                        <?php echo $label; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                    <!-- CADET ONLY FIELDS (Hidden by default) -->
+                    <div id="cadetFields" class="cadet-fields">
+                        <h4 style="color: var(--accent); margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-user-graduate"></i> Maklumat Kadet
+                            <span class="cadet-only">(Kadet Sahaja)</span>
+                        </h4>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="service_type">Jenis Perkhidmatan</label>
+                                <select id="service_type" name="service_type">
+                                    <option value="">Pilih Jenis</option>
+                                    <?php foreach ($serviceTypeOptions as $value => $label): ?>
+                                        <option value="<?php echo $value; ?>" <?php echo (isset($_POST['service_type']) && $_POST['service_type'] == $value) ? 'selected' : ''; ?>>
+                                            <?php echo $label; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="rank_level">Tahap Pangkat</label>
+                                <select id="rank_level" name="rank_level">
+                                    <option value="">Pilih Tahap</option>
+                                    <?php foreach ($rankLevelOptions as $value => $label): ?>
+                                        <option value="<?php echo $value; ?>" <?php echo (isset($_POST['rank_level']) && $_POST['rank_level'] == $value) ? 'selected' : ''; ?>>
+                                            <?php echo $label; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
                         </div>
                         
                         <div class="form-group">
-                            <label for="rank_level">Tahap Pangkat</label>
-                            <select id="rank_level" name="rank_level">
-                                <option value="">Pilih Tahap</option>
-                                <?php foreach ($rankLevelOptions as $value => $label): ?>
-                                    <option value="<?php echo $value; ?>" <?php echo (isset($_POST['rank_level']) && $_POST['rank_level'] == $value) ? 'selected' : ''; ?>>
-                                        <?php echo $label; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label for="join_date">Tarikh Masuk</label>
+                            <input type="date" 
+                                   id="join_date" 
+                                   name="join_date"
+                                   value="<?php echo isset($_POST['join_date']) ? htmlspecialchars($_POST['join_date']) : date('Y-m-d'); ?>">
+                            <span class="field-hint">
+                                <i class="fas fa-info-circle"></i> 
+                                Tarikh kadet mula berkhidmat
+                            </span>
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="join_date">Tarikh Masuk</label>
-                        <input type="date" 
-                               id="join_date" 
-                               name="join_date"
-                               value="<?php echo isset($_POST['join_date']) ? htmlspecialchars($_POST['join_date']) : date('Y-m-d'); ?>">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="profile_image">Gambar Profil</label>
+                        <label for="profile_image">Gambar Profil (Opsional)</label>
                         <input type="file" 
                                id="profile_image" 
                                name="profile_image" 
@@ -732,18 +798,27 @@ $rankLevelOptions = [
                                 <span>Peranan:</span>
                                 <strong><?php echo $roleOptions[$registeredUser['role']] ?? $registeredUser['role']; ?></strong>
                             </div>
-                            <?php if ($registeredUser['service_type']): ?>
+                            
+                            <!-- Only show service, rank, join date for cadet -->
+                            <?php if ($registeredUser['role'] === 'cadet'): ?>
+                                <?php if ($registeredUser['service_type']): ?>
+                                    <div class="info-item">
+                                        <span>Jenis Perkhidmatan:</span>
+                                        <strong><?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></strong>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($registeredUser['rank_level']): ?>
+                                    <div class="info-item">
+                                        <span>Tahap Pangkat:</span>
+                                        <strong><?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></strong>
+                                    </div>
+                                <?php endif; ?>
                                 <div class="info-item">
-                                    <span>Jenis Perkhidmatan:</span>
-                                    <strong><?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></strong>
+                                    <span>Tarikh Masuk:</span>
+                                    <strong><?php echo date('d/m/Y', strtotime($registeredUser['registered_at'])); ?></strong>
                                 </div>
                             <?php endif; ?>
-                            <?php if ($registeredUser['rank_level']): ?>
-                                <div class="info-item">
-                                    <span>Tahap Pangkat:</span>
-                                    <strong><?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></strong>
-                                </div>
-                            <?php endif; ?>
+                            
                             <div class="info-item">
                                 <span>Didaftarkan pada:</span>
                                 <strong><?php echo date('d/m/Y H:i:s', strtotime($registeredUser['registered_at'])); ?></strong>
@@ -845,6 +920,40 @@ $rankLevelOptions = [
     </div>
     
     <script>
+        // Toggle cadet fields
+        function toggleCadetFields() {
+            const roleSelect = document.getElementById('role');
+            const cadetFields = document.getElementById('cadetFields');
+            
+            if (roleSelect.value === 'cadet') {
+                cadetFields.style.display = 'block';
+            } else {
+                cadetFields.style.display = 'none';
+                
+                // Clear cadet fields when not selected
+                document.getElementById('service_type').value = '';
+                document.getElementById('rank_level').value = '';
+                document.getElementById('join_date').value = '';
+            }
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleCadetFields(); // Set initial state
+            
+            // Set join date to today if cadet is selected
+            const roleSelect = document.getElementById('role');
+            const joinDateField = document.getElementById('join_date');
+            
+            if (roleSelect.value === 'cadet' && (!joinDateField.value || joinDateField.value === '')) {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                joinDateField.value = `${yyyy}-${mm}-${dd}`;
+            }
+        });
+        
         // Copy to clipboard
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -894,6 +1003,19 @@ $rankLevelOptions = [
                         <p><strong>Nombor Tentera:</strong> <?php echo htmlspecialchars($registeredUser['military_number']); ?></p>
                         <p><strong>Kata Laluan:</strong> <?php echo htmlspecialchars($registeredUser['password']); ?></p>
                     </div>
+                    
+                    <?php if ($registeredUser['role'] === 'cadet'): ?>
+                    <div class="info">
+                        <h3>Maklumat Kadet:</h3>
+                        <?php if ($registeredUser['service_type']): ?>
+                        <p><strong>Jenis Perkhidmatan:</strong> <?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></p>
+                        <?php endif; ?>
+                        <?php if ($registeredUser['rank_level']): ?>
+                        <p><strong>Tahap Pangkat:</strong> <?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></p>
+                        <?php endif; ?>
+                        <p><strong>Tarikh Masuk:</strong> <?php echo date('d/m/Y', strtotime($registeredUser['registered_at'])); ?></p>
+                    </div>
+                    <?php endif; ?>
                     
                     <div class="warning">
                         <h4><i class="fas fa-exclamation-triangle"></i> Arahan Penting:</h4>
@@ -960,18 +1082,6 @@ $rankLevelOptions = [
             }
         `;
         document.head.appendChild(style);
-        
-        // Set join date to today on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            const joinDateField = document.getElementById('join_date');
-            if (joinDateField && !joinDateField.value) {
-                const today = new Date();
-                const yyyy = today.getFullYear();
-                const mm = String(today.getMonth() + 1).padStart(2, '0');
-                const dd = String(today.getDate()).padStart(2, '0');
-                joinDateField.value = `${yyyy}-${mm}-${dd}`;
-            }
-        });
     </script>
 </body>
 </html>

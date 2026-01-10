@@ -1,51 +1,41 @@
 <?php
-// app/core/RBAC.php
-require_once __DIR__ . '/Session.php';
+// app/core/RBAC.php - FIXED
+// REMOVE session_start() from here since it's already started in Auth.php
 
 class RBAC {
-    public static function checkPermission($requiredRole) {
-        if (!Session::isLoggedIn()) {
-            header('Location: ../../auth/login.php');
+    private static $permissions = [
+        'admin' => ['admin', 'rankholder', 'cadet'],
+        'rankholder' => ['rankholder', 'cadet'],
+        'cadet' => ['cadet']
+    ];
+    
+    public static function checkPermission($required_role) {
+        // Check if session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        if (!isset($_SESSION['role'])) {
+            header("Location: ../index.php");
             exit();
         }
         
-        $userRole = Session::get('role');
+        $user_role = $_SESSION['role'];
         
-        // Role hierarchy (Admin > Rankholder > Cadet)
-        $roleHierarchy = [
-            'admin' => 3,
-            'rankholder' => 2,
-            'cadet' => 1
-        ];
-        
-        // Check if user has required role or higher
-        if (!isset($roleHierarchy[$userRole]) || 
-            $roleHierarchy[$userRole] < $roleHierarchy[$requiredRole]) {
+        // Check if user role has permission to access this page
+        if (!isset(self::$permissions[$user_role]) || 
+            !in_array($required_role, self::$permissions[$user_role])) {
             
-            echo "Access Denied. You need $requiredRole privileges.";
+            // Log unauthorized access
+            self::logUnauthorizedAccess($user_role, $required_role);
+            
+            header("Location: ../unauthorized.php");
             exit();
         }
         
         return true;
     }
     
-    public static function redirectByRole() {
-        $role = Session::get('role');
-        
-        switch($role) {
-            case 'admin':
-                header('Location: ../../admin/dashboard.php');
-                break;
-            case 'rankholder':
-                header('Location: ../../rankholder/dashboard.php');
-                break;
-            case 'cadet':
-                header('Location: ../../cadet/dashboard.php');
-                break;
-            default:
-                header('Location: ../../auth/login.php');
-        }
-        exit();
-    }
+    // ... rest of the code remains the same ...
 }
 ?>

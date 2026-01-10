@@ -1,15 +1,13 @@
-# .htaccess - ROOT FOLDER
+# .htaccess
 RewriteEngine On
+RewriteBase /
 
-# Fix logout path
-RewriteRule ^logout/?$ logout.php [L,QSA]
-
-# Redirect to index if file doesn't exist
+# Redirect to login if not authenticated
+RewriteCond %{REQUEST_URI} !^/index\.php
+RewriteCond %{REQUEST_URI} !^/login\.php
+RewriteCond %{REQUEST_URI} !^/logout\.php
+RewriteCond %{REQUEST_URI} !^/unauthorized\.php
+RewriteCond %{REQUEST_URI} !^/assets/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php [L,QSA]
-
-# Security headers
-Header set X-Content-Type-Options "nosniff"
-Header set X-Frame-Options "SAMEORIGIN"
-Header set X-XSS-Protection "1; mode=block"
+RewriteRule ^(.*)$ index.php [L]

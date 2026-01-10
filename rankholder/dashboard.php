@@ -1,29 +1,95 @@
 <?php
-session_start();
-require_once '../config/database.php';
+// rankholder/dashboard.php - UPDATED
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-// Check if user is logged in and is rankholder
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'rankholder') {
-    header("Location: ../login.php");
-    exit();
+// Start output buffering
+ob_start();
+
+// Use the same core files as admin
+require_once __DIR__ . '/../app/core/RBAC.php';
+require_once __DIR__ . '/../app/core/Auth.php';
+require_once __DIR__ . '/../app/core/Database.php';
+
+// Check permission - MUST BE rankholder
+RBAC::checkPermission('rankholder');
+
+try {
+    $auth = new Auth();
+    $user = $auth->getCurrentUser();
+    $db = new Database();
+    
+    // Check if user is logged in
+    if (!$user) {
+        header("Location: ../index.php");
+        exit();
+    }
+    
+    // Double check role (extra security)
+    if ($user['role'] !== 'rankholder') {
+        header("Location: ../unauthorized.php");
+        exit();
+    }
+    
+} catch (Exception $e) {
+    die("Error initializing system: " . $e->getMessage());
 }
 
-// Get rankholder info
-$user_id = $_SESSION['user_id'];
-$stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
-$stmt->execute([$user_id]);
-$user = $stmt->fetch();
-
 // Get today's attendance count
-$today = date('Y-m-d');
-$attendance_stmt = $pdo->prepare("
-    SELECT COUNT(*) as total_cadets 
-    FROM attendance a 
-    JOIN users u ON a.user_id = u.user_id 
-    WHERE u.role = 'cadet' AND DATE(a.date) = ?
-");
-$attendance_stmt->execute([$today]);
-$attendance_data = $attendance_stmt->fetch();
+$attendance_today = 0;
+try {
+    $today = date('Y-m-d');
+    $attendance_sql = "SELECT COUNT(DISTINCT a.user_id) as total_cadets 
+                       FROM attendance a 
+                       JOIN users u ON a.user_id = u.user_id 
+                       WHERE u.role = 'cadet' 
+                       AND DATE(a.date) = ?
+                       AND a.status = 'present'";
+    $attendance_stmt = $db->prepare($attendance_sql);
+    $attendance_stmt->bind_param("s", $today);
+    $attendance_stmt->execute();
+    $result = $attendance_stmt->get_result();
+    $attendance_data = $result->fetch_assoc();
+    $attendance_today = $attendance_data['total_cadets'] ?? 0;
+} catch (Exception $e) {
+    $attendance_today = 0;
+}
+
+// Get total cadets under this rankholder's service
+$total_cadets = 0;
+try {
+    $service_type = $user['service_type'] ?? null;
+    if ($service_type) {
+        $cadets_sql = "SELECT COUNT(*) as total FROM users 
+                      WHERE role = 'cadet' AND service_type = ?";
+        $cadets_stmt = $db->prepare($cadets_sql);
+        $cadets_stmt->bind_param("s", $service_type);
+        $cadets_stmt->execute();
+        $result = $cadets_stmt->get_result();
+        $row = $result->fetch_assoc();
+        $total_cadets = $row['total'] ?? 0;
+    }
+} catch (Exception $e) {
+    $total_cadets = 0;
+}
+
+// Get pending leaves count
+$pending_leaves = 0;
+try {
+    $leaves_sql = "SELECT COUNT(*) as total FROM attendance 
+                  WHERE is_leave = 1 AND (status = 'excused' OR status IS NULL) 
+                  AND checked_by IS NULL";
+    $leaves_stmt = $db->prepare($leaves_sql);
+    $leaves_stmt->execute();
+    $result = $leaves_stmt->get_result();
+    $row = $result->fetch_assoc();
+    $pending_leaves = $row['total'] ?? 0;
+} catch (Exception $e) {
+    $pending_leaves = 0;
+}
+
+ob_end_flush();
 ?>
 <!DOCTYPE html>
 <html lang="ms">
@@ -31,7 +97,6 @@ $attendance_data = $attendance_stmt->fetch();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Rankholder</title>
-    <link href="../assets/css/style.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         /* Mobile-first responsive dashboard */
@@ -137,9 +202,29 @@ $attendance_data = $attendance_stmt->fetch();
         }
         
         .logout-btn {
-            margin: 20px 15px;
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: calc(100% - 30px);
+            margin: 20px 15px;
+            padding: 12px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .logout-btn:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+        
+        .logout-btn i {
+            margin-right: 8px;
         }
         
         /* Main Content */
@@ -261,6 +346,43 @@ $attendance_data = $attendance_stmt->fetch();
             font-size: 1.2rem;
         }
         
+        /* Recent Activity */
+        .recent-activity {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            margin-top: 30px;
+        }
+        
+        .recent-activity h2 {
+            color: #1a237e;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+        
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .activity-table th {
+            background: #f8f9fa;
+            color: #333;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .activity-table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .status-pending { color: #f57c00; font-weight: 600; }
+        .status-approved { color: #388e3c; font-weight: 600; }
+        .status-completed { color: #1976d2; font-weight: 600; }
+        
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .sidebar {
@@ -322,6 +444,7 @@ $attendance_data = $attendance_stmt->fetch();
                     <h4><?php echo htmlspecialchars($user['name']); ?></h4>
                     <p><?php echo htmlspecialchars($user['military_number']); ?></p>
                     <p><i class="fas fa-star"></i> <?php echo htmlspecialchars($user['rank_level'] ?? 'N/A'); ?></p>
+                    <p><i class="fas fa-flag"></i> <?php echo strtoupper(htmlspecialchars($user['service_type'] ?? 'N/A')); ?></p>
                 </div>
             </div>
             
@@ -353,7 +476,7 @@ $attendance_data = $attendance_stmt->fetch();
                 </li>
             </ul>
             
-            <a href="../logout.php" class="btn btn-danger logout-btn">
+            <a href="../logout.php" class="logout-btn" onclick="return confirm('Log out dari sistem?')">
                 <i class="fas fa-sign-out-alt"></i> Log Keluar
             </a>
         </div>
@@ -381,7 +504,7 @@ $attendance_data = $attendance_stmt->fetch();
                     </div>
                     <div class="stat-info">
                         <h3>Total Cadets</h3>
-                        <div class="stat-number">15</div>
+                        <div class="stat-number"><?php echo $total_cadets; ?></div>
                     </div>
                 </div>
                 
@@ -391,7 +514,7 @@ $attendance_data = $attendance_stmt->fetch();
                     </div>
                     <div class="stat-info">
                         <h3>Today's Attendance</h3>
-                        <div class="stat-number"><?php echo $attendance_data['total_cadets'] ?? '0'; ?></div>
+                        <div class="stat-number"><?php echo $attendance_today; ?></div>
                     </div>
                 </div>
                 
@@ -401,7 +524,7 @@ $attendance_data = $attendance_stmt->fetch();
                     </div>
                     <div class="stat-info">
                         <h3>Pending Leaves</h3>
-                        <div class="stat-number">3</div>
+                        <div class="stat-number"><?php echo $pending_leaves; ?></div>
                     </div>
                 </div>
                 
@@ -455,40 +578,44 @@ $attendance_data = $attendance_stmt->fetch();
             </div>
             
             <!-- Recent Activity -->
-            <div class="quick-actions" style="margin-top: 30px;">
+            <div class="recent-activity">
                 <h2><i class="fas fa-history"></i> Recent Activity</h2>
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: #f8f9fa;">
-                                <th style="padding: 12px; text-align: left;">Date</th>
-                                <th style="padding: 12px; text-align: left;">Activity</th>
-                                <th style="padding: 12px; text-align: left;">Cadet</th>
-                                <th style="padding: 12px; text-align: left;">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding: 12px;">09/01/2025</td>
-                                <td style="padding: 12px;">Leave Application</td>
-                                <td style="padding: 12px;">CD001 - Ahmad Lee</td>
-                                <td style="padding: 12px;"><span style="color: #f57c00;">Pending</span></td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding: 12px;">08/01/2025</td>
-                                <td style="padding: 12px;">Attendance Update</td>
-                                <td style="padding: 12px;">CD002 - Siti Sarah</td>
-                                <td style="padding: 12px;"><span style="color: #388e3c;">Approved</span></td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding: 12px;">07/01/2025</td>
-                                <td style="padding: 12px;">Performance Review</td>
-                                <td style="padding: 12px;">CD003 - Raju Kumar</td>
-                                <td style="padding: 12px;"><span style="color: #1976d2;">Completed</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table class="activity-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Activity</th>
+                            <th>Cadet</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>09/01/2025</td>
+                            <td>Leave Application</td>
+                            <td>CD001 - Ahmad Lee</td>
+                            <td class="status-pending">Pending</td>
+                        </tr>
+                        <tr>
+                            <td>08/01/2025</td>
+                            <td>Attendance Update</td>
+                            <td>CD002 - Siti Sarah</td>
+                            <td class="status-approved">Approved</td>
+                        </tr>
+                        <tr>
+                            <td>07/01/2025</td>
+                            <td>Performance Review</td>
+                            <td>CD003 - Raju Kumar</td>
+                            <td class="status-completed">Completed</td>
+                        </tr>
+                        <tr>
+                            <td>06/01/2025</td>
+                            <td>Upload Medical Certificate</td>
+                            <td>CD004 - Mei Ling</td>
+                            <td class="status-approved">Approved</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

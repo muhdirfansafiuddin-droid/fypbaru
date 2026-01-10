@@ -1,8 +1,11 @@
 <?php
-// admin/dashboard.php
+// admin/dashboard.php - FIXED VERSION
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
+
+// Start output buffering
+ob_start();
 
 // UPDATE PATH INI:
 require_once __DIR__ . '/../app/core/RBAC.php';
@@ -11,9 +14,21 @@ require_once __DIR__ . '/../app/core/Database.php';
 
 // Check permission
 RBAC::checkPermission('admin');
-$auth = new Auth();
-$user = $auth->getCurrentUser();
-$db = new Database();
+
+try {
+    $auth = new Auth();
+    $user = $auth->getCurrentUser();
+    $db = new Database();
+    
+    // Check if user is logged in
+    if (!$user) {
+        header("Location: ../index.php");
+        exit();
+    }
+    
+} catch (Exception $e) {
+    die("Error initializing system: " . $e->getMessage());
+}
 
 // Helper function to format time
 function timeAgo($timestamp) {
@@ -309,6 +324,9 @@ function safeDisplay($value, $default = 'Tiada data') {
 function safeNumber($value, $decimals = 0) {
     return is_numeric($value) ? number_format($value, $decimals) : '0';
 }
+
+// End output buffering and send to browser
+ob_end_flush();
 ?>
 <!DOCTYPE html>
 <html lang="en">

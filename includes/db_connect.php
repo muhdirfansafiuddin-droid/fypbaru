@@ -1,4 +1,5 @@
 <?php
+// includes/db_connect.php - FIXED
 // Database configuration for XAMPP
 $host = "localhost";
 $username = "root";
@@ -23,5 +24,6 @@ date_default_timezone_set('Asia/Kuala_Lumpur');
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-echo "<!-- Database connected successfully -->";
+// REMOVE the echo statement as it causes output before headers
+// echo "<!-- Database connected successfully -->";
 ?>
