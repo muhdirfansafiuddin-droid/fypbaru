@@ -49,7 +49,7 @@ $stats = $stats_stmt->fetch();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rekod Kehadiran - CAAMS</title>
+    <title>Attendance Record - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -70,7 +70,7 @@ $stats = $stats_stmt->fetch();
         }
         
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              background: #82CAFF;
             min-height: 100vh;
             padding: 20px;
         }
@@ -267,37 +267,37 @@ $stats = $stats_stmt->fetch();
         <!-- HEADER -->
         <div class="header">
             <a href="list_cadets.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Kembali ke Senarai
+                <i class="fas fa-arrow-left"></i> Back to List
             </a>
             <h1>
-                <i class="fas fa-calendar-check"></i> Rekod Kehadiran
+                <i class="fas fa-calendar-check"></i> Attendance Record
             </h1>
-            <p style="opacity: 0.8; margin-top: 5px;">Lihat rekod kehadiran kadet</p>
+            <p style="opacity: 0.8; margin-top: 5px;">View cadet attendance records</p>
         </div>
         
         <div class="content">
             <!-- INFO CARD -->
             <div class="info-card">
-                <h4><i class="fas fa-user"></i> Maklumat Kadet</h4>
+                <h4><i class="fas fa-user"></i> Cadet Information</h4>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px;">
                     <div>
-                        <strong>Nama:</strong> <?php echo htmlspecialchars($cadet['name']); ?>
+                        <strong>Name:</strong> <?php echo htmlspecialchars($cadet['name']); ?>
                     </div>
                     <div>
-                        <strong>No. Tentera:</strong> <?php echo $cadet['military_number']; ?>
+                        <strong>Military Number:</strong> <?php echo $cadet['military_number']; ?>
                     </div>
                     <div>
-                        <strong>Perkhidmatan:</strong> <?php echo strtoupper($cadet['service_type']); ?>
+                        <strong>Service:</strong> <?php echo strtoupper($cadet['service_type']); ?>
                     </div>
                     <div>
-                        <strong>Pangkat:</strong> <?php echo ucfirst($cadet['rank_level']); ?>
+                        <strong>Rank:</strong> <?php echo ucfirst($cadet['rank_level']); ?>
                     </div>
                 </div>
             </div>
             
             <!-- STATISTICS -->
             <div class="section-title">
-                <i class="fas fa-chart-pie"></i> Statistik Kehadiran
+                <i class="fas fa-chart-pie"></i> Attendance Statistics
             </div>
             
             <div class="stats-grid">
@@ -309,54 +309,54 @@ $stats = $stats_stmt->fetch();
                 
                 <div class="stat-box present">
                     <div class="stat-number" style="color: var(--success);"><?php echo $stats['present'] ?? 0; ?></div>
-                    <div class="stat-label">Hadir</div>
+                    <div class="stat-label">Present</div>
                     <i class="fas fa-check-circle" style="font-size: 1.5rem; color: var(--success); margin-top: 10px;"></i>
                 </div>
                 
                 <div class="stat-box absent">
                     <div class="stat-number" style="color: var(--danger);"><?php echo $stats['absent'] ?? 0; ?></div>
-                    <div class="stat-label">Tidak Hadir</div>
+                    <div class="stat-label">Absent</div>
                     <i class="fas fa-times-circle" style="font-size: 1.5rem; color: var(--danger); margin-top: 10px;"></i>
                 </div>
                 
                 <div class="stat-box late">
                     <div class="stat-number" style="color: var(--warning);"><?php echo $stats['late'] ?? 0; ?></div>
-                    <div class="stat-label">Lewat</div>
+                    <div class="stat-label">Late</div>
                     <i class="fas fa-clock" style="font-size: 1.5rem; color: var(--warning); margin-top: 10px;"></i>
                 </div>
             </div>
             
             <!-- ATTENDANCE TABLE -->
             <div class="section-title">
-                <i class="fas fa-history"></i> Rekod Kehadiran
+                <i class="fas fa-history"></i> Attendance Records
             </div>
             
             <div class="table-container">
                 <?php if (empty($attendance_records)): ?>
                     <div class="empty-state">
                         <i class="fas fa-calendar-times"></i>
-                        <h3>Tiada Rekod Kehadiran</h3>
-                        <p>Kadet ini belum mempunyai rekod kehadiran.</p>
+                        <h3>No Attendance Records</h3>
+                        <p>This cadet has no attendance records yet.</p>
                     </div>
                 <?php else: ?>
                     <table class="attendance-table">
                         <thead>
                             <tr>
-                                <th>Tarikh</th>
-                                <th>Aktiviti</th>
-                                <th>Lokasi</th>
-                                <th>Sesi</th>
+                                <th>Date</th>
+                                <th>Activity</th>
+                                <th>Location</th>
+                                <th>Session</th>
                                 <th>Status</th>
-                                <th>Catatan</th>
+                                <th>Notes</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($attendance_records as $record): 
                                 $status_labels = [
-                                    'present' => 'Hadir',
-                                    'absent' => 'Tidak Hadir', 
-                                    'late' => 'Lewat',
-                                    'excused' => 'Bermasalah'
+                                    'present' => 'Present',
+                                    'absent' => 'Absent', 
+                                    'late' => 'Late',
+                                    'excused' => 'Excused'
                                 ];
                             ?>
                             <tr>
@@ -369,10 +369,10 @@ $stats = $stats_stmt->fetch();
                                 <td>
                                     <?php 
                                     $session_labels = [
-                                        'pagi' => 'Pagi',
-                                        'tengah hari' => 'Tengah Hari',
-                                        'petang' => 'Petang',
-                                        'malam' => 'Malam'
+                                        'pagi' => 'Morning',
+                                        'tengah hari' => 'Midday',
+                                        'petang' => 'Evening',
+                                        'malam' => 'Night'
                                     ];
                                     echo $session_labels[$record['session_time']] ?? $record['session_time'];
                                     ?>
@@ -393,7 +393,7 @@ $stats = $stats_stmt->fetch();
             <!-- BACK BUTTON -->
             <div style="text-align: center; margin-top: 30px;">
                 <a href="list_cadets.php" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i> Kembali ke Senarai Kadet
+                    <i class="fas fa-arrow-left"></i> Back to Cadet List
                 </a>
             </div>
         </div>

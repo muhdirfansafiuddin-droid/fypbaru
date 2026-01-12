@@ -4,12 +4,12 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// GUNA CORE FILES YANG SAMA SEPERTI DASHBOARD
+// USE SAME CORE FILES AS DASHBOARD
 require_once __DIR__ . '/../app/core/RBAC.php';
 require_once __DIR__ . '/../app/core/Auth.php';
 require_once __DIR__ . '/../app/core/Database.php';
 
-// Check admin authentication menggunakan RBAC
+// Check admin authentication using RBAC
 RBAC::checkPermission('admin');
 
 // Initialize
@@ -23,7 +23,7 @@ $registeredUser = null;
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
-    // Hanya ambil data yang diperlukan
+    // Only take necessary data
     $military_number = strtoupper(trim($_POST['military_number'] ?? ''));
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -31,11 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
     $phone = trim($_POST['phone'] ?? '');
     
     // For cadet only fields
-    $join_date = date('Y-m-d'); // Default untuk semua
+    $join_date = date('Y-m-d'); // Default for everyone
     $service_type = NULL;
     $rank_level = NULL;
     
-    // Hanya set untuk kadet sahaja
+    // Only set for cadets
     if ($role === 'cadet') {
         $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : date('Y-m-d');
         $service_type = $_POST['service_type'] ?? NULL;
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
     
     // Validate required fields
     if (empty($military_number) || empty($name) || empty($email) || empty($role)) {
-        $message = 'Nombor Tentera, Nama, Emel, dan Peranan adalah wajib';
+        $message = 'Military Number, Name, Email, and Role are required';
         $messageType = 'error';
     } else {
         // Check if military number already exists
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
         $checkStmt->execute();
         
         if ($checkStmt->get_result()->num_rows > 0) {
-            $message = 'Nombor tentera sudah wujud dalam sistem!';
+            $message = 'Military number already exists in the system!';
             $messageType = 'error';
         } else {
             // Check if email already exists
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
             $emailCheckStmt->execute();
             
             if ($emailCheckStmt->get_result()->num_rows > 0) {
-                $message = 'Alamat emel sudah wujud dalam sistem!';
+                $message = 'Email address already exists in the system!';
                 $messageType = 'error';
             } else {
                 // Generate random password (8 characters)
@@ -170,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_user'])) {
                             $logStmt->execute();
                         }
                         
-                        $message = 'Pengguna berjaya didaftarkan! Kredensial telah disimpan untuk pengedaran manual.';
+                        $message = 'User successfully registered! Credentials have been saved for manual distribution.';
                         $messageType = 'success';
                         
                         $registeredUser = [
@@ -215,9 +215,9 @@ $roleOptions = [
 
 // Service type options (for cadet only)
 $serviceTypeOptions = [
-    'darat' => 'Darat',
-    'laut' => 'Laut',
-    'udara' => 'Udara'
+    'darat' => 'Army',
+    'laut' => 'Navy',
+    'udara' => 'AirForce'
 ];
 
 // Rank level options (for cadet only)
@@ -232,7 +232,7 @@ $rankLevelOptions = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daftar Pengguna - CAAMS</title>
+    <title>Register User - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -252,7 +252,7 @@ $rankLevelOptions = [
         }
         
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+             background: #82CAFF;
             min-height: 100vh;
             padding: 20px;
         }
@@ -569,23 +569,23 @@ $rankLevelOptions = [
         <!-- HEADER -->
         <div class="header">
             <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Kembali ke Dashboard
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
             </a>
             <h1>
-                <i class="fas fa-user-plus"></i> Daftar Pengguna
+                <i class="fas fa-user-plus"></i> Register User
             </h1>
-            <p style="opacity: 0.8; margin-top: 5px;">Cipta akaun pengguna baru untuk sistem CAAMS</p>
+            <p style="opacity: 0.8; margin-top: 5px;">Create new user accounts for the CAAMS system</p>
         </div>
         
         <!-- INFORMATION ALERT -->
         <div class="alert info">
             <i class="fas fa-info-circle"></i>
             <div>
-                <strong>Cara penggunaan:</strong> 
-                1. Isi maklumat wajib → 
-                2. Kata laluan digenerasi automatik → 
-                3. Berikan kredensial kepada pengguna<br>
-                <strong>Nota:</strong> Maklumat servis, pangkat, dan tarikh masuk hanya untuk kadet sahaja
+                <strong>How to use:</strong> 
+                1. Fill required information → 
+                2. Password generated automatically → 
+                3. Provide credentials to the user<br>
+                <strong>Note:</strong> Service, rank, and join date information are for cadets only
             </div>
         </div>
         
@@ -605,61 +605,61 @@ $rankLevelOptions = [
             <!-- LEFT: FORM -->
             <div class="form-section">
                 <h2 class="section-title">
-                    <i class="fas fa-plus-circle"></i> Daftar Pengguna Baru
+                    <i class="fas fa-plus-circle"></i> Register New User
                 </h2>
                 
                 <form method="POST" action="" enctype="multipart/form-data" id="userForm">
                     <input type="hidden" name="register_user" value="1">
                     
                     <div class="form-group">
-                        <label for="military_number" class="required">Nombor Tentera *</label>
+                        <label for="military_number" class="required">Military Number *</label>
                         <input type="text" 
                                id="military_number" 
                                name="military_number" 
-                               placeholder="Contoh: CD001, RH001, ADM001"
+                               placeholder="Example: CD001, RH001, ADM001"
                                required
                                value="<?php echo isset($_POST['military_number']) ? htmlspecialchars($_POST['military_number']) : ''; ?>">
                         <span class="field-hint">
                             <i class="fas fa-info-circle"></i> 
-                            Format: CD untuk kadet, RH untuk rankholder, ADM untuk admin
+                            Format: CD for cadet, RH for rankholder, ADM for admin
                         </span>
                     </div>
                     
                     <div class="form-group">
-                        <label for="name" class="required">Nama Penuh *</label>
+                        <label for="name" class="required">Full Name *</label>
                         <input type="text" 
                                id="name" 
                                name="name" 
-                               placeholder="Contoh: Ahmad bin Abdullah"
+                               placeholder="Example: Ahmad bin Abdullah"
                                required
                                value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>">
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="email" class="required">Emel *</label>
+                            <label for="email" class="required">Email *</label>
                             <input type="email" 
                                    id="email" 
                                    name="email" 
-                                   placeholder="Contoh: user@example.com"
+                                   placeholder="Example: user@example.com"
                                    required
                                    value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
                         </div>
                         
                         <div class="form-group">
-                            <label for="phone">Nombor Telefon</label>
+                            <label for="phone">Phone Number</label>
                             <input type="tel" 
                                    id="phone" 
                                    name="phone" 
-                                   placeholder="Contoh: 0123456789"
+                                   placeholder="Example: 0123456789"
                                    value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>">
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="role" class="required">Peranan *</label>
+                        <label for="role" class="required">Role *</label>
                         <select id="role" name="role" required onchange="toggleCadetFields()">
-                            <option value="">Pilih Peranan</option>
+                            <option value="">Select Role</option>
                             <?php foreach ($roleOptions as $value => $label): ?>
                                 <option value="<?php echo $value; ?>" <?php echo (isset($_POST['role']) && $_POST['role'] == $value) ? 'selected' : ''; ?>>
                                     <?php echo $label; ?>
@@ -668,22 +668,22 @@ $rankLevelOptions = [
                         </select>
                         <span class="field-hint">
                             <i class="fas fa-info-circle"></i> 
-                            Pilih "Cadet" untuk paparan maklumat tambahan
+                            Select "Cadet" to show additional information
                         </span>
                     </div>
                     
                     <!-- CADET ONLY FIELDS (Hidden by default) -->
                     <div id="cadetFields" class="cadet-fields">
                         <h4 style="color: var(--accent); margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                            <i class="fas fa-user-graduate"></i> Maklumat Kadet
-                            <span class="cadet-only">(Kadet Sahaja)</span>
+                            <i class="fas fa-user-graduate"></i> Cadet Information
+                            <span class="cadet-only">(Cadets Only)</span>
                         </h4>
                         
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="service_type">Jenis Perkhidmatan</label>
+                                <label for="service_type">Service</label>
                                 <select id="service_type" name="service_type">
-                                    <option value="">Pilih Jenis</option>
+                                    <option value="">Select Type</option>
                                     <?php foreach ($serviceTypeOptions as $value => $label): ?>
                                         <option value="<?php echo $value; ?>" <?php echo (isset($_POST['service_type']) && $_POST['service_type'] == $value) ? 'selected' : ''; ?>>
                                             <?php echo $label; ?>
@@ -693,9 +693,9 @@ $rankLevelOptions = [
                             </div>
                             
                             <div class="form-group">
-                                <label for="rank_level">Tahap Pangkat</label>
+                                <label for="rank_level">Rank </label>
                                 <select id="rank_level" name="rank_level">
-                                    <option value="">Pilih Tahap</option>
+                                    <option value="">Select Level</option>
                                     <?php foreach ($rankLevelOptions as $value => $label): ?>
                                         <option value="<?php echo $value; ?>" <?php echo (isset($_POST['rank_level']) && $_POST['rank_level'] == $value) ? 'selected' : ''; ?>>
                                             <?php echo $label; ?>
@@ -706,32 +706,32 @@ $rankLevelOptions = [
                         </div>
                         
                         <div class="form-group">
-                            <label for="join_date">Tarikh Masuk</label>
+                            <label for="join_date">Join Date</label>
                             <input type="date" 
                                    id="join_date" 
                                    name="join_date"
                                    value="<?php echo isset($_POST['join_date']) ? htmlspecialchars($_POST['join_date']) : date('Y-m-d'); ?>">
                             <span class="field-hint">
                                 <i class="fas fa-info-circle"></i> 
-                                Tarikh kadet mula berkhidmat
+                                Date the cadet started service
                             </span>
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="profile_image">Gambar Profil (Opsional)</label>
+                        <label for="profile_image">Profile Image (Optional)</label>
                         <input type="file" 
                                id="profile_image" 
                                name="profile_image" 
                                accept="image/*">
                         <span class="field-hint">
                             <i class="fas fa-info-circle"></i> 
-                            Format: JPG, PNG, GIF (Maks: 2MB)
+                            Format: JPG, PNG, GIF (Max: 2MB)
                         </span>
                     </div>
                     
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-user-plus"></i> Daftar Pengguna
+                        <i class="fas fa-user-plus"></i> Register User
                     </button>
                 </form>
             </div>
@@ -739,7 +739,7 @@ $rankLevelOptions = [
             <!-- RIGHT: USER PREVIEW -->
             <div class="preview-section">
                 <h2 class="section-title">
-                    <i class="fas fa-eye"></i> Paparan Pengguna
+                    <i class="fas fa-eye"></i> User Preview
                 </h2>
                 
                 <div class="user-preview">
@@ -747,55 +747,55 @@ $rankLevelOptions = [
                         <!-- SUCCESS MESSAGE -->
                         <div style="text-align: center; margin-bottom: 20px;">
                             <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 10px;"></i>
-                            <h3 style="color: var(--success);">Pengguna Didaftarkan!</h3>
-                            <p>Berikan kredensial di bawah kepada pengguna:</p>
+                            <h3 style="color: var(--success);">User Registered!</h3>
+                            <p>Provide the credentials below to the user:</p>
                         </div>
                         
                         <!-- CREDENTIALS BOX -->
                         <div class="credentials-box">
-                            <strong><i class="fas fa-key"></i> Kredensial Log Masuk:</strong>
+                            <strong><i class="fas fa-key"></i> Login Credentials:</strong>
                             <div style="margin-top: 10px;">
                                 <div style="margin-bottom: 10px;">
-                                    <strong>Nombor Tentera:</strong>
+                                    <strong>Military Number:</strong>
                                     <div style="font-family: monospace; font-size: 1.1rem; margin-top: 5px;">
                                         <?php echo htmlspecialchars($registeredUser['military_number']); ?>
                                     </div>
                                     <button class="copy-btn" onclick="copyToClipboard('<?php echo htmlspecialchars($registeredUser['military_number']); ?>')">
-                                        <i class="fas fa-copy"></i> Salin
+                                        <i class="fas fa-copy"></i> Copy
                                     </button>
                                 </div>
                                 
                                 <div style="margin-bottom: 10px;">
-                                    <strong>Kata Laluan:</strong>
+                                    <strong>Password:</strong>
                                     <div style="font-family: monospace; font-size: 1.1rem; margin-top: 5px;">
                                         <?php echo htmlspecialchars($registeredUser['password']); ?>
                                     </div>
                                     <button class="copy-btn" onclick="copyToClipboard('<?php echo htmlspecialchars($registeredUser['password']); ?>')">
-                                        <i class="fas fa-copy"></i> Salin
+                                        <i class="fas fa-copy"></i> Copy
                                     </button>
                                 </div>
                             </div>
                             <small style="display: block; margin-top: 10px; opacity: 0.9;">
-                                <i class="fas fa-share-alt"></i> Kredensial telah disimpan ke fail untuk rujukan
+                                <i class="fas fa-share-alt"></i> Credentials have been saved to file for reference
                             </small>
                         </div>
                         
                         <!-- USER INFORMATION -->
                         <div class="user-info">
                             <div class="info-item">
-                                <span>ID Pengguna:</span>
+                                <span>User ID:</span>
                                 <strong>#<?php echo htmlspecialchars($registeredUser['user_id']); ?></strong>
                             </div>
                             <div class="info-item">
-                                <span>Nama:</span>
+                                <span>Name:</span>
                                 <strong><?php echo htmlspecialchars($registeredUser['name']); ?></strong>
                             </div>
                             <div class="info-item">
-                                <span>Emel:</span>
+                                <span>Email:</span>
                                 <strong><?php echo htmlspecialchars($registeredUser['email']); ?></strong>
                             </div>
                             <div class="info-item">
-                                <span>Peranan:</span>
+                                <span>Role:</span>
                                 <strong><?php echo $roleOptions[$registeredUser['role']] ?? $registeredUser['role']; ?></strong>
                             </div>
                             
@@ -803,24 +803,24 @@ $rankLevelOptions = [
                             <?php if ($registeredUser['role'] === 'cadet'): ?>
                                 <?php if ($registeredUser['service_type']): ?>
                                     <div class="info-item">
-                                        <span>Jenis Perkhidmatan:</span>
+                                        <span>Service:</span>
                                         <strong><?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></strong>
                                     </div>
                                 <?php endif; ?>
                                 <?php if ($registeredUser['rank_level']): ?>
                                     <div class="info-item">
-                                        <span>Tahap Pangkat:</span>
+                                        <span>Rank Level:</span>
                                         <strong><?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></strong>
                                     </div>
                                 <?php endif; ?>
                                 <div class="info-item">
-                                    <span>Tarikh Masuk:</span>
+                                    <span>Join Date:</span>
                                     <strong><?php echo date('d/m/Y', strtotime($registeredUser['registered_at'])); ?></strong>
                                 </div>
                             <?php endif; ?>
                             
                             <div class="info-item">
-                                <span>Didaftarkan pada:</span>
+                                <span>Registered at:</span>
                                 <strong><?php echo date('d/m/Y H:i:s', strtotime($registeredUser['registered_at'])); ?></strong>
                             </div>
                         </div>
@@ -829,25 +829,25 @@ $rankLevelOptions = [
                         <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
                             <button onclick="printCredentials()" 
                                     class="btn" style="background: var(--accent); color: white;">
-                                <i class="fas fa-print"></i> Cetak Kredensial
+                                <i class="fas fa-print"></i> Print Credentials
                             </button>
                             <button onclick="window.location.href='manage_users.php'" 
                                     class="btn" style="background: var(--success); color: white;">
-                                <i class="fas fa-users"></i> Urus Pengguna
+                                <i class="fas fa-users"></i> Manage Users
                             </button>
                             <button onclick="window.location.href='register_user.php'" 
                                     class="btn" style="background: var(--secondary); color: white;">
-                                <i class="fas fa-user-plus"></i> Daftar Baru
+                                <i class="fas fa-user-plus"></i> Register New
                             </button>
                         </div>
                         
                     <?php else: ?>
                         <div style="padding: 40px 20px; text-align: center; color: var(--secondary);">
                             <i class="fas fa-user-plus" style="font-size: 3rem; opacity: 0.3; margin-bottom: 15px;"></i>
-                            <h3 style="margin-bottom: 10px;">Tiada Pengguna Didaftarkan</h3>
-                            <p>Isi borang di sebelah kiri untuk mendaftar pengguna baru</p>
+                            <h3 style="margin-bottom: 10px;">No User Registered</h3>
+                            <p>Fill out the form on the left to register a new user</p>
                             <small style="display: block; margin-top: 15px; color: #a0aec0;">
-                                <i class="fas fa-info-circle"></i> Kata laluan akan digenerasi automatik dan disimpan ke fail
+                                <i class="fas fa-info-circle"></i> Password will be generated automatically and saved to file
                             </small>
                         </div>
                     <?php endif; ?>
@@ -858,7 +858,7 @@ $rankLevelOptions = [
         <!-- RECENT USERS -->
         <div class="users-section">
             <h2 class="section-title">
-                <i class="fas fa-history"></i> Pengguna Terkini
+                <i class="fas fa-history"></i> Recent Users
             </h2>
             
             <?php if ($recentUsers && $recentUsers->num_rows > 0): ?>
@@ -866,13 +866,13 @@ $rankLevelOptions = [
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Nombor Tentera</th>
-                            <th>Nama</th>
-                            <th>Emel</th>
-                            <th>Peranan</th>
-                            <th>Jenis Perkhidmatan</th>
-                            <th>Tahap Pangkat</th>
-                            <th>Didaftarkan</th>
+                            <th>Military Number</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Service </th>
+                            <th>Rank </th>
+                            <th>Registered</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -913,7 +913,7 @@ $rankLevelOptions = [
             <?php else: ?>
                 <div style="text-align: center; padding: 30px; color: var(--secondary);">
                     <i class="fas fa-user-slash" style="font-size: 2rem; opacity: 0.3; margin-bottom: 10px;"></i>
-                    <p>Belum ada pengguna didaftarkan</p>
+                    <p>No users have been registered yet</p>
                 </div>
             <?php endif; ?>
         </div>
@@ -957,7 +957,7 @@ $rankLevelOptions = [
         // Copy to clipboard
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                showToast('Berjaya disalin!', 'success');
+                showToast('Copied successfully!', 'success');
             }).catch(err => {
                 // Fallback method
                 const textArea = document.createElement('textarea');
@@ -966,7 +966,7 @@ $rankLevelOptions = [
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                showToast('Berjaya disalin!', 'success');
+                showToast('Copied successfully!', 'success');
             });
         }
         
@@ -977,7 +977,7 @@ $rankLevelOptions = [
             printWindow.document.write(`
                 <html>
                 <head>
-                    <title>CAAMS - Kredensial Pengguna</title>
+                    <title>CAAMS - User Credentials</title>
                     <style>
                         body { font-family: Arial; padding: 20px; }
                         .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 15px; }
@@ -988,47 +988,47 @@ $rankLevelOptions = [
                 </head>
                 <body>
                     <div class="header">
-                        <h2>CAAMS - Kredensial Log Masuk</h2>
-                        <p>Untuk: <?php echo htmlspecialchars($registeredUser['name']); ?></p>
+                        <h2>CAAMS - Login Credentials</h2>
+                        <p>For: <?php echo htmlspecialchars($registeredUser['name']); ?></p>
                     </div>
                     
                     <div class="info">
-                        <p><strong>ID Pengguna:</strong> #<?php echo $registeredUser['user_id']; ?></p>
-                        <p><strong>Didaftarkan pada:</strong> <?php echo date('d/m/Y H:i:s', strtotime($registeredUser['registered_at'])); ?></p>
+                        <p><strong>User ID:</strong> #<?php echo $registeredUser['user_id']; ?></p>
+                        <p><strong>Registered at:</strong> <?php echo date('d/m/Y H:i:s', strtotime($registeredUser['registered_at'])); ?></p>
                     </div>
                     
                     <div class="credentials">
-                        <h3>Maklumat Log Masuk:</h3>
-                        <p><strong>URL Sistem:</strong> http://<?php echo $_SERVER['HTTP_HOST']; ?></p>
-                        <p><strong>Nombor Tentera:</strong> <?php echo htmlspecialchars($registeredUser['military_number']); ?></p>
-                        <p><strong>Kata Laluan:</strong> <?php echo htmlspecialchars($registeredUser['password']); ?></p>
+                        <h3>Login Information:</h3>
+                        <p><strong>System URL:</strong> http://<?php echo $_SERVER['HTTP_HOST']; ?></p>
+                        <p><strong>Military Number:</strong> <?php echo htmlspecialchars($registeredUser['military_number']); ?></p>
+                        <p><strong>Password:</strong> <?php echo htmlspecialchars($registeredUser['password']); ?></p>
                     </div>
                     
                     <?php if ($registeredUser['role'] === 'cadet'): ?>
                     <div class="info">
-                        <h3>Maklumat Kadet:</h3>
+                        <h3>Cadet Information:</h3>
                         <?php if ($registeredUser['service_type']): ?>
-                        <p><strong>Jenis Perkhidmatan:</strong> <?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></p>
+                        <p><strong>Service Type:</strong> <?php echo $serviceTypeOptions[$registeredUser['service_type']] ?? $registeredUser['service_type']; ?></p>
                         <?php endif; ?>
                         <?php if ($registeredUser['rank_level']): ?>
-                        <p><strong>Tahap Pangkat:</strong> <?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></p>
+                        <p><strong>Rank Level:</strong> <?php echo $rankLevelOptions[$registeredUser['rank_level']] ?? $registeredUser['rank_level']; ?></p>
                         <?php endif; ?>
-                        <p><strong>Tarikh Masuk:</strong> <?php echo date('d/m/Y', strtotime($registeredUser['registered_at'])); ?></p>
+                        <p><strong>Join Date:</strong> <?php echo date('d/m/Y', strtotime($registeredUser['registered_at'])); ?></p>
                     </div>
                     <?php endif; ?>
                     
                     <div class="warning">
-                        <h4><i class="fas fa-exclamation-triangle"></i> Arahan Penting:</h4>
+                        <h4><i class="fas fa-exclamation-triangle"></i> Important Instructions:</h4>
                         <ul>
-                            <li>Gunakan kredensial di atas untuk log masuk pertama</li>
-                            <li>Tukar kata laluan selepas log masuk pertama</li>
-                            <li>Jangan kongsikan kredensial dengan sesiapa</li>
-                            <li>Hubungi admin jika ada masalah log masuk</li>
+                            <li>Use the above credentials for first login</li>
+                            <li>Change password after first login</li>
+                            <li>Do not share credentials with anyone</li>
+                            <li>Contact admin if there are login issues</li>
                         </ul>
                     </div>
                     
                     <div class="info">
-                        <p><small><i>Dicetak pada: <?php echo date('d/m/Y H:i:s'); ?></i></small></p>
+                        <p><small><i>Printed on: <?php echo date('d/m/Y H:i:s'); ?></i></small></p>
                     </div>
                 </body>
                 </html>

@@ -32,34 +32,34 @@ try {
 
 // Helper function to format time
 function timeAgo($timestamp) {
-    if (empty($timestamp) || $timestamp === null) return "Tiada data";
+    if (empty($timestamp) || $timestamp === null) return "No data";
     
     try {
         $time = strtotime($timestamp);
-        if ($time === false) return "Tarikh tidak sah";
+        if ($time === false) return "Invalid date";
         
         $timeDiff = time() - $time;
         
         if ($timeDiff < 60) {
-            return "Baru sahaja";
+            return "Just now";
         } elseif ($timeDiff < 3600) {
             $mins = floor($timeDiff / 60);
-            return "$mins minit" . ($mins > 1 ? "" : "") . " lepas";
+            return "$mins minute" . ($mins > 1 ? "s" : "") . " ago";
         } elseif ($timeDiff < 86400) {
             $hours = floor($timeDiff / 3600);
-            return "$hours jam" . ($hours > 1 ? "" : "") . " lepas";
+            return "$hours hour" . ($hours > 1 ? "s" : "") . " ago";
         } elseif ($timeDiff < 604800) {
             $days = floor($timeDiff / 86400);
-            return "$days hari" . ($days > 1 ? "" : "") . " lepas";
+            return "$days day" . ($days > 1 ? "s" : "") . " ago";
         } else {
             return date('d M Y, h:i A', $time);
         }
     } catch (Exception $e) {
-        return "Tarikh tidak sah";
+        return "Invalid date";
     }
 }
 
-// Fetch statistics dengan error handling
+// Fetch statistics with error handling - THESE ARE REAL-TIME FROM DATABASE
 $stats = [
     'cadets' => 0,
     'sessions' => 0,
@@ -68,7 +68,7 @@ $stats = [
     'attendance_today' => 0
 ];
 
-// 1. Total cadets
+// 1. Total cadets - REAL-TIME QUERY
 try {
     $sql1 = "SELECT COUNT(*) as total FROM users WHERE role = 'cadet'";
     $stmt1 = $db->prepare($sql1);
@@ -82,7 +82,7 @@ try {
     $stats['cadets'] = 0;
 }
 
-// 2. Total training sessions this month
+// 2. Total training sessions this month - REAL-TIME QUERY
 try {
     $sql2 = "SELECT COUNT(*) as total FROM training_sessions 
             WHERE MONTH(training_date) = MONTH(CURRENT_DATE()) 
@@ -99,7 +99,7 @@ try {
     $stats['sessions'] = 0;
 }
 
-// 3. Pending leave requests
+// 3. Pending leave requests - REAL-TIME QUERY
 try {
     $sql3 = "SELECT COUNT(*) as total FROM attendance 
             WHERE is_leave = 1 AND (status = 'excused' OR status IS NULL) 
@@ -115,7 +115,7 @@ try {
     $stats['pending_leaves'] = 0;
 }
 
-// 4. Average attendance rate
+// 4. Average attendance rate - REAL-TIME QUERY
 try {
     $sql4 = "SELECT ROUND(AVG(attendance_rate), 1) as avg FROM allowance_calculations 
             WHERE month_year = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')";
@@ -130,7 +130,7 @@ try {
     $stats['avg_attendance'] = 0;
 }
 
-// 5. Total attendance today
+// 5. Total attendance today - REAL-TIME QUERY
 try {
     $sql5 = "SELECT COUNT(*) as total FROM attendance a
             JOIN training_sessions ts ON a.session_id = ts.session_id
@@ -148,14 +148,14 @@ try {
     $stats['attendance_today'] = 0;
 }
 
-// Fetch latest activities dengan error handling
+// Fetch latest activities with error handling
 $latestCadet = null;
 $latestSession = null;
 $latestAttendance = null;
 $latestLeave = null;
 $latestAllowance = null;
 
-// 1. Latest registered cadets
+// 1. Latest registered cadets - REAL-TIME QUERY
 try {
     $sql6 = "SELECT name, created_at FROM users 
             WHERE role = 'cadet' 
@@ -170,7 +170,7 @@ try {
     $latestCadet = null;
 }
 
-// 2. Latest training sessions
+// 2. Latest training sessions - REAL-TIME QUERY
 try {
     $sql7 = "SELECT location, training_type, created_at 
             FROM training_sessions 
@@ -186,7 +186,7 @@ try {
     $latestSession = null;
 }
 
-// 3. Latest attendance updates
+// 3. Latest attendance updates - REAL-TIME QUERY
 try {
     $sql8 = "SELECT a.recorded_at, u.name, ts.training_type, ts.location
             FROM attendance a
@@ -204,7 +204,7 @@ try {
     $latestAttendance = null;
 }
 
-// 4. Latest leave approvals
+// 4. Latest leave approvals - REAL-TIME QUERY
 try {
     $sql9 = "SELECT a.reason, a.checked_at, u.name, a.status
             FROM attendance a
@@ -221,7 +221,7 @@ try {
     $latestLeave = null;
 }
 
-// 5. Latest allowance calculations
+// 5. Latest allowance calculations - REAL-TIME QUERY
 try {
     $sql10 = "SELECT ac.calculated_at, u.name, ac.total_amount 
              FROM allowance_calculations ac
@@ -237,7 +237,7 @@ try {
     $latestAllowance = null;
 }
 
-// Get service type distribution
+// Get service type distribution - REAL-TIME QUERY
 $serviceStats = ['darat' => 0, 'laut' => 0, 'udara' => 0];
 try {
     $serviceSql = "SELECT service_type, COUNT(*) as count FROM users 
@@ -256,7 +256,7 @@ try {
     // Keep default values
 }
 
-// Get today's activities with full details
+// Get today's activities with full details - REAL-TIME QUERY
 $todayActivitiesResult = null;
 try {
     $todayActivitiesSql = "SELECT ts.training_type, ts.location, ts.session_time, 
@@ -283,11 +283,11 @@ try {
     $todayActivitiesResult = null;
 }
 
-// Get pending actions count
+// Get pending actions count - REAL-TIME QUERY
 $pendingActions = 0;
 $pendingActions += $stats['pending_leaves'];
 
-// Check if there are attendance records pending verification
+// Check if there are attendance records pending verification - REAL-TIME QUERY
 $pendingAttendance = 0;
 try {
     $pendingAttendanceSql = "SELECT COUNT(*) as count FROM attendance a
@@ -316,7 +316,7 @@ function formatNumber($num) {
 }
 
 // Safe display function
-function safeDisplay($value, $default = 'Tiada data') {
+function safeDisplay($value, $default = 'No data') {
     return !empty($value) ? htmlspecialchars($value) : $default;
 }
 
@@ -336,8 +336,7 @@ ob_end_flush();
     <title>Admin Dashboard - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* PASTE SEMUA CSS ANDA YANG SAMA DI SINI */
-        /* CSS TIDAK DIUBAH - SAMA SEPERTI SEBELUM */
+        /* PASTE ALL YOUR SAME CSS HERE */
         :root {
             --primary: #1a365d;
             --secondary: #2d3748;
@@ -359,7 +358,7 @@ ob_end_flush();
         }
         
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #82CAFF;
             min-height: 100vh;
             padding: 20px;
         }
@@ -393,17 +392,56 @@ ob_end_flush();
             border-radius: 50%;
         }
         
-        .system-title {
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .system-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .system-titles h1 {
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 5px;
             letter-spacing: 1px;
         }
         
-        .system-subtitle {
+        .system-titles p {
             font-size: 1.2rem;
             opacity: 0.9;
-            margin-bottom: 20px;
+        }
+        
+        /* UPDATED: SINGLE LOGO ON RIGHT */
+        .header-logo {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+    
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        
+        .logo-circle:hover {
+            transform: scale(1.05);
+        }
+        
+        .logo-circle img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .user-info {
@@ -414,6 +452,7 @@ ob_end_flush();
             padding: 15px 20px;
             border-radius: 10px;
             backdrop-filter: blur(10px);
+            position: relative;
         }
         
         .user-details h3 {
@@ -424,6 +463,12 @@ ob_end_flush();
         .user-details p {
             opacity: 0.9;
             font-size: 0.9rem;
+        }
+        
+        .logout-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
         }
         
         .logout-btn {
@@ -623,7 +668,7 @@ ob_end_flush();
             font-size: 0.7rem;
         }
         
-        /* SERVICE DISTRIBUTION - NOW IN RIGHT COLUMN */
+        /* SERVICE DISTRIBUTION */
         .service-distribution {
             background: var(--light);
             border-radius: 15px;
@@ -834,6 +879,16 @@ ob_end_flush();
             .stats-grid {
                 grid-template-columns: repeat(3, 1fr);
             }
+            
+            .header-top {
+                flex-direction: column;
+                gap: 20px;
+                align-items: flex-start;
+            }
+            
+            .header-logo {
+                align-self: flex-start;
+            }
         }
         
         @media (max-width: 992px) {
@@ -848,6 +903,17 @@ ob_end_flush();
             .activity-feed {
                 max-height: 300px;
             }
+            
+            .user-info {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .logout-section {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
         }
         
         @media (max-width: 768px) {
@@ -855,13 +921,7 @@ ob_end_flush();
                 grid-template-columns: 1fr;
             }
             
-            .user-info {
-                flex-direction: column;
-                gap: 15px;
-                text-align: center;
-            }
-            
-            .system-title {
+            .system-titles h1 {
                 font-size: 2rem;
             }
             
@@ -889,6 +949,29 @@ ob_end_flush();
                 align-items: flex-start;
                 gap: 10px;
             }
+            
+            .logo-circle {
+                width: 70px;
+                height: 70px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header-top {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .system-info {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .logo-circle {
+                width: 60px;
+                height: 60px;
+            }
         }
     </style>
 </head>
@@ -896,8 +979,21 @@ ob_end_flush();
     <div class="dashboard-container">
         <!-- HEADER -->
         <header class="dashboard-header">
-            <h1 class="system-title">CAAMS</h1>
-            <p class="system-subtitle">Centralized Attendance & Allowance Management System</p>
+            <div class="header-top">
+                <div class="system-info">
+                    <div class="system-titles">
+                        <h1>CAAMS</h1>
+                        <p>Centralized Attendance & Allowance Management System</p>
+                    </div>
+                </div>
+                
+                <!-- UPDATED: SINGLE LOGO ON RIGHT SIDE -->
+                <div class="header-logo">
+                    <div class="logo-circle" title="UPNM Logo">
+                        <img src="../assets/upnm.png" alt="UPNM Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\"fas fa-university\" style=\"color:#3182ce; font-size:2rem;\"></i>'">
+                    </div>
+                </div>
+            </div>
             
             <div class="user-info">
                 <div class="user-details">
@@ -907,20 +1003,24 @@ ob_end_flush();
                         <i class="far fa-calendar"></i> <?php echo date('l, d F Y'); ?>
                     </p>
                 </div>
-                <a href="../logout.php" class="logout-btn" onclick="return confirm('Log out dari sistem?')">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
+                
+                <div class="logout-section">
+                    <a href="../logout.php" class="logout-btn" onclick="return confirm('Log out of system?')">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
+                </div>
             </div>
         </header>
         
-        <!-- STATISTICS -->
+        <!-- STATISTICS - ALL REAL-TIME DATA -->
         <div class="stats-grid">
             <div class="stat-card cadets">
                 <div class="stat-icon">
                     <i class="fas fa-users"></i>
                 </div>
                 <div class="stat-number"><?php echo safeNumber($stats['cadets']); ?></div>
-                <div class="stat-label">Total Kadet</div>
+                <div class="stat-label">Total Cadets</div>
+                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
             </div>
             
             <div class="stat-card sessions">
@@ -928,7 +1028,8 @@ ob_end_flush();
                     <i class="fas fa-calendar-alt"></i>
                 </div>
                 <div class="stat-number"><?php echo safeNumber($stats['sessions']); ?></div>
-                <div class="stat-label">Sesi Bulan Ini</div>
+                <div class="stat-label">This Month's Sessions</div>
+                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
             </div>
             
             <div class="stat-card pending">
@@ -936,7 +1037,8 @@ ob_end_flush();
                     <i class="fas fa-clock"></i>
                 </div>
                 <div class="stat-number"><?php echo safeNumber($pendingActions); ?></div>
-                <div class="stat-label">Tindakan Tunggu</div>
+                <div class="stat-label">Pending Actions</div>
+                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
             </div>
             
             <div class="stat-card attendance">
@@ -944,7 +1046,8 @@ ob_end_flush();
                     <i class="fas fa-clipboard-check"></i>
                 </div>
                 <div class="stat-number"><?php echo safeNumber($stats['attendance_today']); ?></div>
-                <div class="stat-label">Kehadiran Hari Ini</div>
+                <div class="stat-label">Today's Attendance</div>
+                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
             </div>
             
             <div class="stat-card rate">
@@ -952,7 +1055,8 @@ ob_end_flush();
                     <i class="fas fa-chart-line"></i>
                 </div>
                 <div class="stat-number"><?php echo safeNumber($stats['avg_attendance'], 1); ?>%</div>
-                <div class="stat-label">Purata Kehadiran</div>
+                <div class="stat-label">Average Attendance</div>
+                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
             </div>
         </div>
         
@@ -970,7 +1074,7 @@ ob_end_flush();
                         <div class="card-icon">
                             <i class="fas fa-user-plus"></i>
                         </div>
-                        <h3 class="card-title">Daftar Pengguna</h3>
+                        <h3 class="card-title">Register User</h3>
                         <p class="card-desc">Register new users, update user information, and manage user roles and permissions.</p>
                     </a>
 
@@ -978,7 +1082,7 @@ ob_end_flush();
                         <div class="card-icon">
                             <i class="fas fa-list-ol"></i>
                         </div>
-                        <h3 class="card-title">Senarai Kadet</h3>
+                        <h3 class="card-title">Cadets & Rankholders list</h3>
                         <p class="card-desc">View and filter cadets by service type and rank level with statistics.</p>
                     </a>
                     
@@ -986,7 +1090,7 @@ ob_end_flush();
                         <div class="card-icon">
                             <i class="fas fa-calendar-plus"></i>
                         </div>
-                        <h3 class="card-title">Jana Aktiviti</h3>
+                        <h3 class="card-title">Generate Activity</h3>
                         <p class="card-desc">Create new training sessions and manage training activities.</p>
                     </a>
                     
@@ -994,15 +1098,15 @@ ob_end_flush();
                         <div class="card-icon">
                             <i class="fas fa-clipboard-check"></i>
                         </div>
-                        <h3 class="card-title">Urus Kehadiran</h3>
+                        <h3 class="card-title">Manage Attendance</h3>
                         <p class="card-desc">View, verify, and manage cadet attendance records from all training sessions.</p>
                     </a>
                     
-                    <a href="manage_leave.php" class="function-card">
+                    <a href="manage_excuses.php" class="function-card">
                         <div class="card-icon">
                             <i class="fas fa-file-medical"></i>
                         </div>
-                        <h3 class="card-title">Urus Pelepasan</h3>
+                        <h3 class="card-title">Manage Excuses</h3>
                         <p class="card-desc">Review and approve/reject cadet leave requests with proof documentation.</p>
                     </a>
                     
@@ -1010,7 +1114,7 @@ ob_end_flush();
                         <div class="card-icon">
                             <i class="fas fa-money-bill-wave"></i>
                         </div>
-                        <h3 class="card-title">Urus Elaun</h3>
+                        <h3 class="card-title">Manage Allowance</h3>
                         <p class="card-desc">Calculate and manage cadet allowances based on attendance and performance.</p>
                     </a>
                     
@@ -1018,7 +1122,7 @@ ob_end_flush();
                         <div class="card-icon">
                             <i class="fas fa-chart-line"></i>
                         </div>
-                        <h3 class="card-title">Laporan Akhir</h3>
+                        <h3 class="card-title">Final Reports</h3>
                         <p class="card-desc">Generate comprehensive reports and export data for analysis and record-keeping.</p>
                     </a>
                 </div>
@@ -1027,7 +1131,7 @@ ob_end_flush();
                 <div class="todays-activities">
                     <div class="activities-header">
                         <h3 class="section-title" style="font-size: 1.5rem; margin-bottom: 0; border-bottom: none;">
-                            <i class="fas fa-calendar-day"></i> Aktiviti Hari Ini
+                            <i class="fas fa-calendar-day"></i> Today's Activities
                         </h3>
                         <div class="date-badge">
                             <?php echo date('d F Y'); ?>
@@ -1038,10 +1142,10 @@ ob_end_flush();
                         <?php if ($todayActivitiesResult && $todayActivitiesResult->num_rows > 0): 
                             while($activity = $todayActivitiesResult->fetch_assoc()): 
                                 $sessionLabels = [
-                                    'pagi' => 'Pagi (06:00-10:00)',
-                                    'tengah hari' => 'Tengah Hari (10:00-14:00)',
-                                    'petang' => 'Petang (14:00-18:00)',
-                                    'malam' => 'Malam (18:00-22:00)'
+                                    'pagi' => 'Morning (06:00-10:00)',
+                                    'tengah hari' => 'Noon (10:00-14:00)',
+                                    'petang' => 'Afternoon (14:00-18:00)',
+                                    'malam' => 'Night (18:00-22:00)'
                                 ];
                                 
                                 $attendancePercent = ($activity['total_count'] > 0) 
@@ -1072,7 +1176,7 @@ ob_end_flush();
                             <div class="activity-stats">
                                 <div class="stat-pill">
                                     <i class="fas fa-user-check"></i>
-                                    <?php echo safeNumber($activity['present_count']); ?> hadir
+                                    <?php echo safeNumber($activity['present_count']); ?> present
                                 </div>
                                 <div class="stat-pill">
                                     <i class="fas fa-users"></i>
@@ -1089,10 +1193,10 @@ ob_end_flush();
                         <?php else: ?>
                         <div class="no-activities">
                             <i class="fas fa-calendar-times"></i>
-                            <h4>Tiada Aktiviti Hari Ini</h4>
-                            <p>Tiada sesi latihan dijadualkan untuk hari ini.</p>
+                            <h4>No Activities Today</h4>
+                            <p>No training sessions scheduled for today.</p>
                             <a href="jana_aktiviti.php" class="btn" style="background: var(--accent); color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px;">
-                                <i class="fas fa-plus-circle"></i> Jana Aktiviti
+                                <i class="fas fa-plus-circle"></i> Generate Activity
                             </a>
                         </div>
                         <?php endif; ?>
@@ -1103,7 +1207,7 @@ ob_end_flush();
             <!-- RIGHT COLUMN: Activity Feed & Service Distribution -->
             <div class="activity-section">
                 <h2 class="section-title">
-                    <i class="fas fa-history"></i> Aktiviti Terkini
+                    <i class="fas fa-history"></i> Recent Activity
                 </h2>
                 
                 <div class="activity-feed">
@@ -1115,9 +1219,9 @@ ob_end_flush();
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestCadet): ?>
-                                    Kadet <strong><?php echo safeDisplay($latestCadet['name']); ?></strong> didaftarkan
+                                    Cadet <strong><?php echo safeDisplay($latestCadet['name']); ?></strong> registered
                                 <?php else: ?>
-                                    Tiada kadet didaftarkan
+                                    No cadets registered
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
@@ -1135,13 +1239,13 @@ ob_end_flush();
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestSession): ?>
-                                    Sesi <strong><?php echo safeDisplay($latestSession['training_type']); ?></strong>
+                                    <strong><?php echo safeDisplay($latestSession['training_type']); ?></strong> session
                                     <?php if ($latestSession['location']): ?>
-                                        di <strong><?php echo safeDisplay($latestSession['location']); ?></strong>
+                                        at <strong><?php echo safeDisplay($latestSession['location']); ?></strong>
                                     <?php endif; ?>
-                                    dijana
+                                    created
                                 <?php else: ?>
-                                    Tiada sesi latihan dijana
+                                    No training sessions created
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
@@ -1159,13 +1263,13 @@ ob_end_flush();
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestAttendance): ?>
-                                    Kehadiran <strong><?php echo safeDisplay($latestAttendance['name']); ?></strong> 
+                                    <strong><?php echo safeDisplay($latestAttendance['name']); ?></strong>'s attendance
                                     <?php if ($latestAttendance['training_type']): ?>
-                                        untuk <strong><?php echo safeDisplay($latestAttendance['training_type']); ?></strong>
+                                        for <strong><?php echo safeDisplay($latestAttendance['training_type']); ?></strong>
                                     <?php endif; ?>
-                                    dikemas kini
+                                    updated
                                 <?php else: ?>
-                                    Tiada kehadiran dikemas kini
+                                    No attendance updated
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
@@ -1183,12 +1287,12 @@ ob_end_flush();
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestLeave): ?>
-                                    Pelepasan <strong><?php echo safeDisplay($latestLeave['name']); ?></strong> diluluskan
+                                    <strong><?php echo safeDisplay($latestLeave['name']); ?></strong>'s leave approved
                                     <?php if ($latestLeave['reason']): ?>
                                         <br><small><?php echo safeDisplay(substr($latestLeave['reason'], 0, 50)); ?><?php echo strlen($latestLeave['reason']) > 50 ? '...' : ''; ?></small>
                                     <?php endif; ?>
                                 <?php else: ?>
-                                    Tiada pelepasan diluluskan
+                                    No leaves approved
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
@@ -1206,10 +1310,10 @@ ob_end_flush();
                         <div class="activity-content">
                             <h4>
                                 <?php if ($latestAllowance): ?>
-                                    Elaun <strong><?php echo safeDisplay($latestAllowance['name']); ?></strong> dikira: 
+                                    <strong><?php echo safeDisplay($latestAllowance['name']); ?></strong>'s allowance calculated: 
                                     <strong>RM <?php echo safeNumber($latestAllowance['total_amount'] ?? 0, 2); ?></strong>
                                 <?php else: ?>
-                                    Tiada elaun dikira
+                                    No allowances calculated
                                 <?php endif; ?>
                             </h4>
                             <p class="activity-time">
@@ -1220,20 +1324,20 @@ ob_end_flush();
                     </div>
                 </div>
                 
-                <!-- SERVICE DISTRIBUTION - NOW AT BOTTOM OF RIGHT COLUMN -->
+                <!-- SERVICE DISTRIBUTION -->
                 <div class="service-distribution">
                     <div class="service-header">
                         <div class="service-icon">
                             <i class="fas fa-chart-pie"></i>
                         </div>
-                        <h3 class="service-title">Taburan Perkhidmatan Kadet</h3>
+                        <h3 class="service-title">Cadet Service Distribution</h3>
                     </div>
                     
                     <div class="service-list">
                         <div class="service-item">
                             <div class="service-name">
                                 <div class="service-badge service-darat"></div>
-                                <span class="service-label">Darat</span>
+                                <span class="service-label">Army</span>
                             </div>
                             <div class="service-count"><?php echo safeNumber($serviceStats['darat']); ?></div>
                         </div>
@@ -1241,7 +1345,7 @@ ob_end_flush();
                         <div class="service-item">
                             <div class="service-name">
                                 <div class="service-badge service-laut"></div>
-                                <span class="service-label">Laut</span>
+                                <span class="service-label">Navy</span>
                             </div>
                             <div class="service-count"><?php echo safeNumber($serviceStats['laut']); ?></div>
                         </div>
@@ -1249,7 +1353,7 @@ ob_end_flush();
                         <div class="service-item">
                             <div class="service-name">
                                 <div class="service-badge service-udara"></div>
-                                <span class="service-label">Udara</span>
+                                <span class="service-label">Air Force</span>
                             </div>
                             <div class="service-count"><?php echo safeNumber($serviceStats['udara']); ?></div>
                         </div>
@@ -1261,8 +1365,8 @@ ob_end_flush();
         <!-- FOOTER -->
         <footer class="dashboard-footer">
             <p class="footer-text">
-                CAAMS Dashboard Admin<br>
-                Markas PALAPES, Universiti Pertahanan Nasional Malaysia<br>
+                CAAMS Admin Dashboard<br>
+                PALAPES Headquarters, National Defence University of Malaysia<br>
                 &copy; 2026 Centralized Attendance & Allowance Management System
             </p>
         </footer>
@@ -1316,7 +1420,7 @@ ob_end_flush();
             const logoutBtn = document.querySelector('.logout-btn');
             if (logoutBtn) {
                 logoutBtn.addEventListener('click', function(e) {
-                    if (!confirm('Adakah anda pasti ingin log keluar?')) {
+                    if (!confirm('Are you sure you want to log out?')) {
                         e.preventDefault();
                     }
                 });
@@ -1348,6 +1452,20 @@ ob_end_flush();
                     } else {
                         this.scrollTop -= 50;
                     }
+                });
+            }
+            
+            // Add hover effect to logo
+            const logoCircle = document.querySelector('.logo-circle');
+            if (logoCircle) {
+                logoCircle.addEventListener('mouseenter', function() {
+                    this.style.transform = 'scale(1.05)';
+                    this.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
+                });
+                
+                logoCircle.addEventListener('mouseleave', function() {
+                    this.style.transform = 'scale(1)';
+                    this.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)';
                 });
             }
         });

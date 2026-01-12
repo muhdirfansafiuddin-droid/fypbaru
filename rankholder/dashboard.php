@@ -29,12 +29,11 @@ try {
     $today = date('Y-m-d');
     $user_name = $user['name'] ?? 'Rankholder';
     
-    // 1. STATISTIK KEHADIRAN HARI INI
+    // 1. TODAY'S ATTENDANCE STATISTICS
     $todayStatsQuery = "SELECT 
                         COUNT(*) as total_today,
                         SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) as present_today,
                         SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent_today,
-                        SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late_today,
                         SUM(CASE WHEN a.status = 'excused' THEN 1 ELSE 0 END) as excused_today
                     FROM attendance a
                     JOIN users u ON a.user_id = u.user_id
@@ -48,18 +47,17 @@ try {
     $todayResult = $todayStmt->get_result();
     $todayStats = $todayResult->fetch_assoc();
     
-    // Jika tidak ada data hari ini, set default values
+    // Set default values if no data today
     if (!$todayStats || $todayStats['total_today'] === null) {
         $todayStats = [
             'total_today' => 0,
             'present_today' => 0,
             'absent_today' => 0,
-            'late_today' => 0,
             'excused_today' => 0
         ];
     }
     
-    // 2. PURATA KEHADIRAN 7 HARI TERAKHIR
+    // 2. AVERAGE ATTENDANCE LAST 7 DAYS
     $sevenDaysAgo = date('Y-m-d', strtotime('-7 days'));
     $avgStatsQuery = "SELECT 
                         COUNT(DISTINCT DATE(a.date)) as days_count,
@@ -85,7 +83,7 @@ try {
         ];
     }
     
-    // 3. PERMOHONAN PELEPASAN - GANTI DENGAN QUERY YANG AMAN
+    // 3. LEAVE REQUESTS - WITH SAFE QUERY
     $leavesStats = [
         'total_leaves' => 0,
         'pending_leaves' => 0,
@@ -94,10 +92,9 @@ try {
     ];
     
     try {
-        // Coba check jika table 'leave_requests' wujud
+        // Try to check if 'leave_requests' table exists
         $checkTable = $db->query("SHOW TABLES LIKE 'leave_requests'");
         if ($checkTable && $checkTable->num_rows > 0) {
-            // Gunakan table leave_requests
             $leavesQuery = "SELECT 
                                 COUNT(*) as total_leaves,
                                 COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_leaves,
@@ -117,7 +114,7 @@ try {
                 $leavesStats = $tempStats;
             }
         } 
-        // Jika tidak, coba table 'excuses'
+        // If not, try 'excuses' table
         else {
             $checkTable2 = $db->query("SHOW TABLES LIKE 'excuses'");
             if ($checkTable2 && $checkTable2->num_rows > 0) {
@@ -142,17 +139,16 @@ try {
             }
         }
     } catch (Exception $e) {
-        // Jika ada error, teruskan dengan default values
+        // Continue with default values if error
         error_log("Leaves query error: " . $e->getMessage());
     }
     
-    // 4. STATISTIK MENGIKUT SERVICE TYPE (untuk rankholder ini saja)
+    // 4. STATISTICS BY SERVICE TYPE (for this rankholder only)
     $serviceStatsQuery = "SELECT 
                             u.service_type,
                             COUNT(*) as total,
                             SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) as present,
                             SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent,
-                            SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late,
                             SUM(CASE WHEN a.status = 'excused' THEN 1 ELSE 0 END) as excused
                         FROM attendance a
                         JOIN users u ON a.user_id = u.user_id
@@ -166,13 +162,12 @@ try {
     $serviceStmt->execute();
     $serviceResult = $serviceStmt->get_result();
     
-    // 5. STATISTIK MENGIKUT PANGKAT
+    // 5. STATISTICS BY RANK
     $rankStatsQuery = "SELECT 
                         u.rank_level,
                         COUNT(*) as total,
                         SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) as present,
                         SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent,
-                        SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late,
                         SUM(CASE WHEN a.status = 'excused' THEN 1 ELSE 0 END) as excused
                     FROM attendance a
                     JOIN users u ON a.user_id = u.user_id
@@ -193,7 +188,7 @@ try {
     $rankStmt->execute();
     $rankResult = $rankStmt->get_result();
     
-    // 6. KEHA DIRAN TERKINI (5 rekod terbaru)
+    // 6. RECENT ATTENDANCE (5 latest records)
     $recentQuery = "SELECT 
                         a.attendance_id,
                         a.date,
@@ -216,6 +211,67 @@ try {
     $recentStmt->bind_param("is", $rankholder_id, $service_type);
     $recentStmt->execute();
     $recentResult = $recentStmt->get_result();
+    
+    // 7. FILTERABLE ATTENDANCE SECTION
+    // Get filter parameters
+    $filter_date = $_GET['date'] ?? date('Y-m-d');
+    $filter_service = $_GET['service'] ?? 'all';
+    $filter_rank = $_GET['rank'] ?? 'all';
+    
+    // Build query with filters for attendance list
+    $attendanceQuery = "SELECT 
+                            a.attendance_id,
+                            a.date,
+                            a.status,
+                            a.recorded_at,
+                            u.name as cadet_name,
+                            u.military_number,
+                            u.rank_level,
+                            u.service_type,
+                            ts.training_type,
+                            ts.location
+                        FROM attendance a
+                        JOIN users u ON a.user_id = u.user_id
+                        JOIN training_sessions ts ON a.session_id = ts.session_id
+                        WHERE a.checked_by = ?";
+    
+    $params = [$rankholder_id];
+    $param_types = "i";
+    
+    // Add service filter
+    if ($filter_service !== 'all') {
+        $attendanceQuery .= " AND u.service_type = ?";
+        $params[] = $filter_service;
+        $param_types .= "s";
+    }
+    
+    // Add date filter
+    $attendanceQuery .= " AND DATE(a.date) = ?";
+    $params[] = $filter_date;
+    $param_types .= "s";
+    
+    // Add rank filter
+    if ($filter_rank !== 'all') {
+        $attendanceQuery .= " AND u.rank_level = ?";
+        $params[] = $filter_rank;
+        $param_types .= "s";
+    }
+    
+    $attendanceQuery .= " ORDER BY a.recorded_at DESC LIMIT 20";
+    
+    // Prepare and execute attendance query
+    $attendanceStmt = $db->prepare($attendanceQuery);
+    $attendanceStmt->bind_param($param_types, ...$params);
+    $attendanceStmt->execute();
+    $attendanceResult = $attendanceStmt->get_result();
+    
+    // Get distinct services for filter dropdown
+    $servicesQuery = "SELECT DISTINCT service_type FROM users WHERE service_type IS NOT NULL";
+    $servicesResult = $db->query($servicesQuery);
+    
+    // Get distinct ranks for filter dropdown
+    $ranksQuery = "SELECT DISTINCT rank_level FROM users WHERE rank_level IS NOT NULL";
+    $ranksResult = $db->query($ranksQuery);
     
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
@@ -354,7 +410,7 @@ try {
             font-size: 0.9rem;
         }
         
-        /* STATS GRID - 3 KOLOM SAHAJA */
+        /* STATS GRID */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -425,7 +481,7 @@ try {
             margin-top: 5px;
         }
         
-        /* DETAILED STATS - MOBILE FRIENDLY */
+        /* DETAILED STATS */
         .detailed-stats {
             background: white;
             border-radius: 10px;
@@ -500,26 +556,23 @@ try {
             display: inline-block;
         }
         
-        .badge-army { background: rgba(66, 153, 225, 0.1); color: var(--blue); }
-        .badge-navy { background: rgba(56, 178, 172, 0.1); color: var(--teal); }
-        .badge-airforce { background: rgba(237, 100, 166, 0.1); color: var(--pink); }
+        .badge-darat { background: rgba(66, 153, 225, 0.1); color: var(--army); }
+        .badge-laut { background: rgba(56, 178, 172, 0.1); color: var(--navy); }
+        .badge-udara { background: rgba(237, 100, 166, 0.1); color: var(--airforce); }
         .badge-other { background: rgba(159, 122, 234, 0.1); color: var(--purple); }
         
-        .badge-officer { background: rgba(72, 187, 120, 0.1); color: var(--success); }
-        .badge-senior { background: rgba(237, 137, 54, 0.1); color: var(--warning); }
-        .badge-junior { background: rgba(159, 122, 234, 0.1); color: var(--purple); }
-        .badge-other-rank { background: rgba(102, 126, 234, 0.1); color: #667eea; }
+       
         
         .stats-numbers {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
             text-align: center;
         }
         
         @media (max-width: 480px) {
             .stats-numbers {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(2, 1fr);
                 gap: 6px;
             }
         }
@@ -532,7 +585,6 @@ try {
         .stat-total { background: rgba(49, 130, 206, 0.05); }
         .stat-present { background: rgba(72, 187, 120, 0.05); }
         .stat-absent { background: rgba(245, 101, 101, 0.05); }
-        .stat-late { background: rgba(237, 137, 54, 0.05); }
         .stat-excused { background: rgba(159, 122, 234, 0.05); }
         
         .stat-value {
@@ -545,7 +597,6 @@ try {
         .stat-total .stat-value { color: var(--accent); }
         .stat-present .stat-value { color: var(--success); }
         .stat-absent .stat-value { color: var(--danger); }
-        .stat-late .stat-value { color: var(--warning); }
         .stat-excused .stat-value { color: var(--purple); }
         
         .stat-label-small {
@@ -554,61 +605,180 @@ try {
             font-weight: 600;
         }
         
-        /* TABLET VIEW */
-        @media (min-width: 768px) {
-            .stats-container {
-                flex-direction: row;
-            }
-            
-            .stats-section {
-                flex: 1;
-            }
-            
-            .stats-numbers {
-                grid-template-columns: repeat(5, 1fr);
+        /* FILTER SECTION */
+        .filter-section {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .filter-form {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .filter-form {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
             }
         }
         
-        /* QUICK ACTIONS */
-        .quick-actions {
+        @media (max-width: 480px) {
+            .filter-form {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .form-label {
+            color: var(--secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .form-select, .form-input {
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background: white;
+        }
+        
+        .form-select:focus, .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+        }
+        
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2c5282;
+        }
+        
+        .btn-secondary {
+            background: #e2e8f0;
+            color: var(--secondary);
+        }
+        
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+        
+        /* ATTENDANCE LIST SECTION */
+        .attendance-section {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .stats-summary {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
             margin-bottom: 15px;
         }
         
-        @media (min-width: 768px) {
-            .quick-actions {
-                grid-template-columns: repeat(4, 1fr);
+        @media (max-width: 768px) {
+            .stats-summary {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
         
-        .action-card {
-            background: white;
-            border-radius: 10px;
-            padding: 15px;
+        .summary-card {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
             text-align: center;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-            text-decoration: none;
-            color: var(--primary);
-            transition: all 0.3s ease;
         }
         
-        .action-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        .summary-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
         }
         
-        .action-icon {
-            font-size: 1.8rem;
-            margin-bottom: 10px;
-            color: var(--accent);
-        }
-        
-        .action-label {
+        .summary-label {
+            font-size: 0.8rem;
+            color: var(--gray);
             font-weight: 600;
+        }
+        
+        .summary-total .summary-value { color: var(--accent); }
+        .summary-present .summary-value { color: var(--success); }
+        .summary-absent .summary-value { color: var(--danger); }
+        .summary-excused .summary-value { color: var(--purple); }
+        
+        .attendance-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .attendance-table th {
+            background: #f1f5f9;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--secondary);
+            font-size: 0.9rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .attendance-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
             font-size: 0.9rem;
         }
+        
+        .attendance-table tbody tr:hover {
+            background: #f8fafc;
+        }
+        
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .badge-present { background: rgba(72, 187, 120, 0.1); color: var(--success); }
+        .badge-absent { background: rgba(245, 101, 101, 0.1); color: var(--danger); }
+        .badge-excused { background: rgba(159, 122, 234, 0.1); color: #ff0; }
         
         /* RECENT ATTENDANCE */
         .recent-attendance {
@@ -676,13 +846,25 @@ try {
         
         .status-present { background: rgba(72, 187, 120, 0.1); color: var(--success); }
         .status-absent { background: rgba(245, 101, 101, 0.1); color: var(--danger); }
-        .status-late { background: rgba(237, 137, 54, 0.1); color: var(--warning); }
         .status-excused { background: rgba(159, 122, 234, 0.1); color: var(--purple); }
         
         .attendance-time {
             color: var(--gray);
             font-size: 0.75rem;
             text-align: right;
+        }
+        
+        /* NO DATA */
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #718096;
+        }
+        
+        .no-data i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            opacity: 0.3;
         }
         
         /* MOBILE NAV */
@@ -735,17 +917,70 @@ try {
             transition: color 0.3s ease;
         }
         
-        /* NO DATA */
-        .no-data {
-            text-align: center;
-            padding: 20px;
-            color: #718096;
+        /* RESPONSIVE TABLE */
+        @media (max-width: 768px) {
+            .attendance-table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            
+            .attendance-table th,
+            .attendance-table td {
+                min-width: 120px;
+            }
         }
         
-        .no-data i {
-            font-size: 2rem;
+        /* TABLET VIEW */
+        @media (min-width: 768px) {
+            .stats-container {
+                flex-direction: row;
+            }
+            
+            .stats-section {
+                flex: 1;
+            }
+        }
+        
+        /* QUICK ACTIONS */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        @media (min-width: 768px) {
+            .quick-actions {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        
+        .action-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            text-decoration: none;
+            color: var(--primary);
+            transition: all 0.3s ease;
+        }
+        
+        .action-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+        
+        .action-icon {
+            font-size: 1.8rem;
             margin-bottom: 10px;
-            opacity: 0.3;
+            color: var(--accent);
+        }
+        
+        .action-label {
+            font-weight: 600;
+            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -755,63 +990,77 @@ try {
         <div class="header">
             <h1>
                 <i class="fas fa-tachometer-alt"></i>
-                Dashboard Rankholder
+                Rankholder Dashboard
             </h1>
             <div class="user-info">
                 <div class="user-details">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-text">
+                        <h3><?php echo htmlspecialchars($user_name); ?></h3>
+                        <p>Rankholder • <?php echo strtoupper($service_type); ?></p>
+                    </div>
                 </div>
                 <button class="logout-btn" onclick="logout()">
-                    <i class="fas fa-sign-out-alt"></i> Log Keluar
+                    <i class="fas fa-sign-out-alt"></i> Log Out
                 </button>
             </div>
         </div>
-    
         
-        <!-- STATS GRID (3 KAD SAHAJA) -->
+        <!-- WELCOME CARD -->
+        <div class="welcome-card">
+            <h2>
+                <i class="fas fa-chart-line"></i>
+                Attendance Overview
+            </h2>
+            <p>Monitor and manage cadet attendance in real-time</p>
+        </div>
+    
+        <!-- STATS GRID -->
         <div class="stats-grid">
-            <!-- Kehadiran Hari Ini -->
+            <!-- Today's Attendance -->
             <div class="stat-card today">
                 <div class="stat-icon">
                     <i class="fas fa-calendar-day"></i>
                 </div>
                 <div class="stat-number"><?php echo $todayStats['total_today']; ?></div>
-                <div class="stat-label">Kehadiran Hari Ini</div>
+                <div class="stat-label">Today's Attendance</div>
                 <div class="stat-subtext"><?php echo date('d/m/Y'); ?></div>
             </div>
             
-            <!-- Purata Kehadiran -->
+            <!-- Average Attendance -->
             <div class="stat-card avg">
                 <div class="stat-icon">
                     <i class="fas fa-chart-line"></i>
                 </div>
                 <div class="stat-number"><?php echo $avgStats['avg_present_percent']; ?>%</div>
-                <div class="stat-label">Purata Hadir</div>
-                <div class="stat-subtext">7 hari terakhir</div>
+                <div class="stat-label">Average Present</div>
+                <div class="stat-subtext">Last 7 days</div>
             </div>
             
-            <!-- Permohonan Pelepasan -->
+            <!-- Leave Requests -->
             <div class="stat-card leaves">
                 <div class="stat-icon">
                     <i class="fas fa-file-import"></i>
                 </div>
                 <div class="stat-number"><?php echo $leavesStats['pending_leaves']; ?></div>
-                <div class="stat-label">Pelepasan Belum Sah</div>
-                <div class="stat-subtext">Daripada <?php echo $leavesStats['total_leaves']; ?> permohonan</div>
+                <div class="stat-label">Pending Leave</div>
+                <div class="stat-subtext">From <?php echo $leavesStats['total_leaves']; ?> requests</div>
             </div>
-            <!-- BUANG KAD LOG KELUAR -->
         </div>
         
-        <!-- DETAILED STATS - MOBILE FRIENDLY -->
+        <!-- DETAILED STATS -->
         <div class="detailed-stats">
             <h3 class="section-title">
                 <i class="fas fa-chart-pie"></i>
-                Statistik Terperinci - Hari Ini
+                Detailed Statistics - Today
             </h3>
             
             <div class="stats-container">
-                <!-- STATISTIK MENGIKUT SERVICE -->
+                <!-- STATISTICS BY SERVICE -->
                 <div class="stats-section">
-                    <h4><i class="fas fa-building"></i> Mengikut Servis</h4>
+                    <h4><i class="fas fa-building"></i> By Service</h4>
                     
                     <?php if ($serviceResult->num_rows > 0): ?>
                     <div class="stats-cards">
@@ -836,19 +1085,15 @@ try {
                                 </div>
                                 <div class="stat-item stat-present">
                                     <div class="stat-value"><?php echo $service['present']; ?></div>
-                                    <div class="stat-label-small">HADIR</div>
+                                    <div class="stat-label-small">PRESENT</div>
                                 </div>
                                 <div class="stat-item stat-absent">
                                     <div class="stat-value"><?php echo $service['absent']; ?></div>
-                                    <div class="stat-label-small">TIDAK</div>
-                                </div>
-                                <div class="stat-item stat-late">
-                                    <div class="stat-value"><?php echo $service['late']; ?></div>
-                                    <div class="stat-label-small">LEWAT</div>
+                                    <div class="stat-label-small">ABSENT</div>
                                 </div>
                                 <div class="stat-item stat-excused">
                                     <div class="stat-value"><?php echo $service['excused']; ?></div>
-                                    <div class="stat-label-small">CUTI</div>
+                                    <div class="stat-label-small">EXCUSED</div>
                                 </div>
                             </div>
                         </div>
@@ -857,14 +1102,14 @@ try {
                     <?php else: ?>
                     <div class="no-data" style="padding: 10px;">
                         <i class="fas fa-building"></i>
-                        <p>Tiada data servis untuk hari ini</p>
+                        <p>No service data for today</p>
                     </div>
                     <?php endif; ?>
                 </div>
                 
-                <!-- STATISTIK MENGIKUT PANGKAT -->
+                <!-- STATISTICS BY RANK -->
                 <div class="stats-section">
-                    <h4><i class="fas fa-ranking-star"></i> Mengikut Pangkat</h4>
+                    <h4><i class="fas fa-ranking-star"></i> By Rank</h4>
                     
                     <?php if ($rankResult->num_rows > 0): ?>
                     <div class="stats-cards">
@@ -890,19 +1135,15 @@ try {
                                 </div>
                                 <div class="stat-item stat-present">
                                     <div class="stat-value"><?php echo $rank['present']; ?></div>
-                                    <div class="stat-label-small">HADIR</div>
+                                    <div class="stat-label-small">PRESENT</div>
                                 </div>
                                 <div class="stat-item stat-absent">
                                     <div class="stat-value"><?php echo $rank['absent']; ?></div>
-                                    <div class="stat-label-small">TIDAK</div>
-                                </div>
-                                <div class="stat-item stat-late">
-                                    <div class="stat-value"><?php echo $rank['late']; ?></div>
-                                    <div class="stat-label-small">LEWAT</div>
+                                    <div class="stat-label-small">ABSENT</div>
                                 </div>
                                 <div class="stat-item stat-excused">
                                     <div class="stat-value"><?php echo $rank['excused']; ?></div>
-                                    <div class="stat-label-small">CUTI</div>
+                                    <div class="stat-label-small">EXCUSED</div>
                                 </div>
                             </div>
                         </div>
@@ -911,19 +1152,179 @@ try {
                     <?php else: ?>
                     <div class="no-data" style="padding: 10px;">
                         <i class="fas fa-ranking-star"></i>
-                        <p>Tiada data pangkat untuk hari ini</p>
+                        <p>No rank data for today</p>
                     </div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         
+        <!-- FILTER SECTION -->
+        <div class="filter-section">
+            <h3 class="section-title">
+                <i class="fas fa-filter"></i>
+                Filter Attendance Records
+            </h3>
+            
+            <form method="GET" action="dashboard.php" class="filter-form">
+                <div class="form-group">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="date" class="form-input" value="<?php echo $filter_date; ?>">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Service Type</label>
+                    <select name="service" class="form-select">
+                        <option value="all">All Services</option>
+                        <?php while($service = $servicesResult->fetch_assoc()): ?>
+                        <option value="<?php echo $service['service_type']; ?>" 
+                            <?php echo $filter_service == $service['service_type'] ? 'selected' : ''; ?>>
+                            <?php echo ucfirst($service['service_type']); ?>
+                        </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Rank Level</label>
+                    <select name="rank" class="form-select">
+                        <option value="all">All Ranks</option>
+                        <?php while($rank = $ranksResult->fetch_assoc()): ?>
+                        <option value="<?php echo $rank['rank_level']; ?>" 
+                            <?php echo $filter_rank == $rank['rank_level'] ? 'selected' : ''; ?>>
+                            <?php echo ucfirst($rank['rank_level']); ?>
+                        </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+                
+                <div class="filter-buttons">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                    <a href="dashboard.php" class="btn btn-secondary">
+                        <i class="fas fa-redo"></i> Reset
+                    </a>
+                </div>
+            </form>
+        </div>
+        
+        <!-- FILTERED ATTENDANCE LIST -->
+        <div class="attendance-section">
+            <h3 class="section-title">
+                <i class="fas fa-clipboard-list"></i>
+                Filtered Attendance Records
+                <span style="font-size: 0.9rem; color: var(--gray); margin-left: auto;">
+                    <?php echo date('d/m/Y', strtotime($filter_date)); ?>
+                </span>
+            </h3>
+            
+            <?php 
+            // Calculate summary statistics for filtered data
+            $total_filtered = 0;
+            $present_filtered = 0;
+            $absent_filtered = 0;
+            $excused_filtered = 0;
+            
+            // Clone result to count and also display
+            $filtered_data = [];
+            while($row = $attendanceResult->fetch_assoc()) {
+                $filtered_data[] = $row;
+                $total_filtered++;
+                switch($row['status']) {
+                    case 'present': $present_filtered++; break;
+                    case 'absent': $absent_filtered++; break;
+                    case 'excused': $excused_filtered++; break;
+                }
+            }
+            ?>
+            
+            <div class="stats-summary">
+                <div class="summary-card summary-total">
+                    <div class="summary-value"><?php echo $total_filtered; ?></div>
+                    <div class="summary-label">TOTAL</div>
+                </div>
+                <div class="summary-card summary-present">
+                    <div class="summary-value"><?php echo $present_filtered; ?></div>
+                    <div class="summary-label">PRESENT</div>
+                </div>
+                <div class="summary-card summary-absent">
+                    <div class="summary-value"><?php echo $absent_filtered; ?></div>
+                    <div class="summary-label">ABSENT</div>
+                </div>
+                <div class="summary-card summary-excused">
+                    <div class="summary-value"><?php echo $excused_filtered; ?></div>
+                    <div class="summary-label">EXCUSED</div>
+                </div>
+            </div>
+            
+            <?php if (count($filtered_data) > 0): ?>
+            <div style="overflow-x: auto;">
+                <table class="attendance-table">
+                    <thead>
+                        <tr>
+                            <th>Cadet Name</th>
+                            <th>Military No.</th>
+                            <th>Service</th>
+                            <th>Rank</th>
+                            <th>Training</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach($filtered_data as $row): 
+                            $statusClass = 'badge-' . $row['status'];
+                            $serviceClass = 'badge-' . strtolower($row['service_type']);
+                            $rankClass = 'badge-' . strtolower($row['rank_level']);
+                        ?>
+                        <tr>
+                            <td>
+                                <div style="font-weight: 600; color: var(--primary);">
+                                    <?php echo htmlspecialchars($row['cadet_name']); ?>
+                                </div>
+                            </td>
+                            <td><?php echo $row['military_number']; ?></td>
+                            <td>
+                                <span class="service-badge <?php echo $serviceClass; ?>">
+                                    <?php echo ucfirst($row['service_type']); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="rank-badge <?php echo $rankClass; ?>">
+                                    <?php echo ucfirst($row['rank_level']); ?>
+                                </span>
+                            </td>
+                            <td><?php echo $row['training_type']; ?></td>
+                            <td><?php echo $row['location']; ?></td>
+                            <td>
+                                <span class="status-badge <?php echo $statusClass; ?>">
+                                    <?php echo strtoupper($row['status']); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php echo date('h:i A', strtotime($row['recorded_at'])); ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php else: ?>
+            <div class="no-data">
+                <i class="fas fa-clipboard-list"></i>
+                <p>No attendance records found for the selected filters</p>
+                <p style="font-size: 0.9rem;">Try changing your filter criteria</p>
+            </div>
+            <?php endif; ?>
+        </div>
         
         <!-- RECENT ATTENDANCE -->
         <div class="recent-attendance">
             <h3 class="section-title">
                 <i class="fas fa-history"></i>
-                Kehadiran Terkini
+                Recent Attendance
             </h3>
             
             <?php if ($recentResult->num_rows > 0): ?>
@@ -961,7 +1362,7 @@ try {
             <?php else: ?>
             <div class="no-data">
                 <i class="fas fa-history"></i>
-                <p>Tiada rekod kehadiran terkini</p>
+                <p>No recent attendance records</p>
             </div>
             <?php endif; ?>
         </div>
@@ -980,38 +1381,34 @@ try {
             <div class="mobile-nav-icon">
                 <i class="fas fa-qrcode"></i>
             </div>
-            <div class="mobile-nav-label">Ambil</div>
+            <div class="mobile-nav-label">Take</div>
         </a>
         
         <a href="view_attendance.php" class="mobile-nav-item">
             <div class="mobile-nav-icon">
                 <i class="fas fa-list"></i>
             </div>
-            <div class="mobile-nav-label">Lihat</div>
+            <div class="mobile-nav-label">View</div>
         </a>
         
-        <a href="manage_leaves.php" class="mobile-nav-item">
-            <div class="mobile-nav-icon">
-                <i class="fas fa-file-upload"></i>
-            </div>
-            <div class="mobile-nav-label">Pelepasan</div>
-        </a>
     </nav>
     
     <script>
         function logout() {
-            if (confirm('Adakah anda pasti ingin log keluar?')) {
+            if (confirm('Are you sure you want to log out?')) {
                 window.location.href = '../logout.php';
             }
         }
         
-        // Refresh dashboard setiap 60 saat
-        setInterval(() => {
-            window.location.reload();
-        }, 60000);
-        
-        // Add ripple effect to mobile nav items
+        // Set default date to today if empty
         document.addEventListener('DOMContentLoaded', function() {
+            const dateInput = document.querySelector('input[type="date"]');
+            if (dateInput && !dateInput.value) {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+            }
+            
+            // Add ripple effect to mobile nav items
             const navItems = document.querySelectorAll('.mobile-nav-item');
             navItems.forEach(item => {
                 item.addEventListener('click', function(e) {
@@ -1024,6 +1421,11 @@ try {
                 });
             });
         });
+        
+        // Refresh dashboard every 60 seconds
+        setInterval(() => {
+            window.location.reload();
+        }, 60000);
     </script>
 </body>
 </html>

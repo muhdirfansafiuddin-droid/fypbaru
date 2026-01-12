@@ -35,7 +35,7 @@ try {
         throw new Exception('Invalid attendance ID');
     }
     
-    if (!isset($_POST['status']) || !in_array($_POST['status'], ['present', 'absent', 'late', 'excused'])) {
+    if (!isset($_POST['status']) || !in_array($_POST['status'], ['present', 'absent', , 'excused'])) {
         throw new Exception('Invalid status value');
     }
     
