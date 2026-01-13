@@ -151,7 +151,7 @@ $sessionTimeLabels = [
         }
         
         body {
-            background: #82CAFF;
+              background: #82CAFF;
             min-height: 100vh;
             padding: 20px;
         }

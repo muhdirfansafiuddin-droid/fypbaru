@@ -1,5 +1,5 @@
 <?php
-// admin/dashboard.php - FIXED VERSION
+// admin/dashboard.php - DESKTOP OPTIMIZED VERSION
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -336,7 +336,7 @@ ob_end_flush();
     <title>Admin Dashboard - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* PASTE ALL YOUR SAME CSS HERE */
+        /* OPTIMIZED FOR DESKTOP - ALL IN ONE VIEW */
         :root {
             --primary: #1a365d;
             --secondary: #2d3748;
@@ -360,82 +360,49 @@ ob_end_flush();
         body {
             background: #82CAFF;
             min-height: 100vh;
-            padding: 20px;
+            overflow-x: hidden;
         }
         
         .dashboard-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            min-height: 100vh;
+            max-width: 100%;
+            margin: 0;
         }
         
-        /* HEADER */
+        /* HEADER - COMPACT */
         .dashboard-header {
             background: var(--primary);
             color: white;
-            padding: 30px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .dashboard-header::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -10%;
-            width: 300px;
-            height: 300px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 50%;
-        }
-        
-        .header-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-        
-        .system-info {
-            display: flex;
+            padding: 15px 25px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
             align-items: center;
             gap: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
         
         .system-titles h1 {
-            font-size: 2.5rem;
+            font-size: 1.8rem;
             font-weight: 700;
-            margin-bottom: 5px;
-            letter-spacing: 1px;
+            margin-bottom: 2px;
         }
         
         .system-titles p {
-            font-size: 1.2rem;
+            font-size: 0.9rem;
             opacity: 0.9;
         }
         
-        /* UPDATED: SINGLE LOGO ON RIGHT */
-        .header-logo {
-            display: flex;
-            align-items: center;
-        }
-        
         .logo-circle {
-            width: 120px;
-            height: 120px;
+            width: 70px;
+            height: 70px;
             border-radius: 50%;
-    
-            display: flex;
-            align-items: center;
             overflow: hidden;
             transition: transform 0.3s;
-        }
-        
-        .logo-circle:hover {
-            transform: scale(1.05);
         }
         
         .logo-circle img {
@@ -446,75 +413,72 @@ ob_end_flush();
         
         .user-info {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 15px;
             background: rgba(255,255,255,0.1);
-            padding: 15px 20px;
-            border-radius: 10px;
-            backdrop-filter: blur(10px);
-            position: relative;
+            padding: 10px 15px;
+            border-radius: 8px;
         }
         
         .user-details h3 {
-            margin-bottom: 5px;
-            font-size: 1.3rem;
+            font-size: 1rem;
+            margin-bottom: 2px;
         }
         
         .user-details p {
+            font-size: 0.8rem;
             opacity: 0.9;
-            font-size: 0.9rem;
-        }
-        
-        .logout-section {
-            display: flex;
-            align-items: center;
-            gap: 20px;
         }
         
         .logout-btn {
             background: var(--accent);
             color: white;
             border: none;
-            padding: 10px 25px;
-            border-radius: 8px;
+            padding: 8px 15px;
+            border-radius: 6px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 5px;
+            font-size: 0.9rem;
         }
         
         .logout-btn:hover {
             background: #2c5282;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transform: translateY(-1px);
         }
         
-        /* STATISTICS GRID */
+        /* STATISTICS - COMPACT GRID */
+        .stats-section {
+            background: white;
+            padding: 15px 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 15px;
-            padding: 0 30px;
-            margin-top: -25px;
-            position: relative;
-            z-index: 1;
+            gap: 10px;
         }
         
         .stat-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px 20px;
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 15px;
             text-align: center;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
             transition: transform 0.3s;
-            border-top: 5px solid;
+            border-left: 4px solid;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
         
         .stat-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         
         .stat-card.cadets { border-color: var(--accent); }
@@ -524,113 +488,274 @@ ob_end_flush();
         .stat-card.rate { border-color: var(--purple); }
         
         .stat-icon {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            color: inherit;
         }
         
-        .stat-card.cadets .stat-icon { color: var(--accent); }
-        .stat-card.sessions .stat-icon { color: var(--warning); }
-        .stat-card.pending .stat-icon { color: var(--danger); }
-        .stat-card.attendance .stat-icon { color: var(--success); }
-        .stat-card.rate .stat-icon { color: var(--purple); }
+        .stat-card.cadets { color: var(--accent); }
+        .stat-card.sessions { color: var(--warning); }
+        .stat-card.pending { color: var(--danger); }
+        .stat-card.attendance { color: var(--success); }
+        .stat-card.rate { color: var(--purple); }
         
         .stat-number {
-            font-size: 2.8rem;
+            font-size: 1.8rem;
             font-weight: 700;
-            color: var(--primary);
-            margin: 10px 0;
+            margin: 5px 0;
         }
         
         .stat-label {
-            color: var(--secondary);
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             font-weight: 600;
+            color: var(--secondary);
+            margin-bottom: 3px;
         }
         
-        /* MAIN CONTENT */
+        .stat-subtext {
+            font-size: 0.7rem;
+            color: #718096;
+            opacity: 0.8;
+        }
+        
+        /* MAIN DASHBOARD CONTENT - ALL IN ONE VIEW */
         .dashboard-main {
-            padding: 60px 30px 40px;
             display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 40px;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 15px;
+            padding: 15px;
+            flex: 1;
+            overflow: hidden;
+            height: calc(100vh - 180px); /* Adjust based on header height */
+        }
+        
+        /* LEFT PANEL - FUNCTIONS */
+        .left-panel {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 15px;
+            overflow: hidden;
+        }
+        
+        /* FUNCTIONS GRID - COMPACT */
+        .functions-section {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
         }
         
         .section-title {
             color: var(--primary);
-            font-size: 1.8rem;
-            margin-bottom: 25px;
-            padding-bottom: 10px;
-            border-bottom: 3px solid var(--accent);
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--accent);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
         
-        .section-title i {
-            color: var(--accent);
-        }
-        
-        /* FUNCTIONS GRID */
         .functions-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        .functions-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .functions-grid::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .functions-grid::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
         }
         
         .function-card {
-            background: var(--light);
-            border-radius: 15px;
-            padding: 25px;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
             transition: all 0.3s;
-            border: 2px solid transparent;
             cursor: pointer;
             text-decoration: none;
             color: inherit;
             display: block;
+            border: 1px solid #e2e8f0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
         
         .function-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-3px);
             border-color: var(--accent);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 15px rgba(49, 130, 206, 0.1);
         }
         
         .card-icon {
-            font-size: 2.5rem;
+            font-size: 1.5rem;
             color: var(--accent);
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         
         .card-title {
-            font-size: 1.3rem;
-            color: var(--primary);
-            margin-bottom: 10px;
+            font-size: 0.95rem;
             font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 6px;
+            line-height: 1.3;
         }
         
         .card-desc {
             color: var(--secondary);
-            line-height: 1.5;
-            font-size: 0.95rem;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            flex: 1;
         }
         
-        /* ACTIVITY FEED */
-        .activity-feed {
-            background: var(--light);
+        /* TODAY'S ACTIVITIES - COMPACT */
+        .todays-activities {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .activities-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .date-badge {
+            background: var(--accent);
+            color: white;
+            padding: 5px 12px;
             border-radius: 15px;
-            padding: 25px;
-            height: fit-content;
-            max-height: 400px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .activity-list {
+            flex: 1;
             overflow-y: auto;
-            margin-bottom: 30px;
+            padding-right: 5px;
+        }
+        
+        .activity-card {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--accent);
+            transition: transform 0.3s;
+            cursor: pointer;
+        }
+        
+        .activity-card:hover {
+            transform: translateX(3px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+        
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .activity-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        .activity-time-badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(49, 130, 206, 0.1);
+            color: var(--accent);
+            white-space: nowrap;
+        }
+        
+        .activity-details {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-bottom: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .activity-stats {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-pill {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            background: white;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: var(--secondary);
+            border: 1px solid #e2e8f0;
+        }
+        
+        .no-activities {
+            text-align: center;
+            padding: 20px;
+            color: var(--secondary);
+        }
+        
+        /* RIGHT PANEL - ACTIVITY & DISTRIBUTION */
+        .right-panel {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 15px;
+            overflow: hidden;
+        }
+        
+        /* ACTIVITY FEED - COMPACT */
+        .activity-feed-section {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .activity-feed {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 200px;
+            padding-right: 5px;
         }
         
         .activity-item {
             display: flex;
             align-items: flex-start;
-            gap: 15px;
-            padding: 15px 0;
+            gap: 10px;
+            padding: 10px 0;
             border-bottom: 1px solid #e2e8f0;
         }
         
@@ -639,76 +764,74 @@ ob_end_flush();
         }
         
         .activity-icon {
-            width: 45px;
-            height: 45px;
+            width: 35px;
+            height: 35px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1rem;
+            font-size: 0.9rem;
             flex-shrink: 0;
         }
         
         .activity-content h4 {
+            font-size: 0.85rem;
             color: var(--primary);
-            margin-bottom: 3px;
-            font-size: 0.95rem;
+            margin-bottom: 2px;
+            line-height: 1.3;
         }
         
         .activity-time {
+            font-size: 0.75rem;
             color: #718096;
-            font-size: 0.8rem;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
         }
         
-        .activity-time i {
-            font-size: 0.7rem;
-        }
-        
-        /* SERVICE DISTRIBUTION */
+        /* SERVICE DISTRIBUTION - COMPACT */
         .service-distribution {
-            background: var(--light);
-            border-radius: 15px;
-            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         
         .service-header {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .service-icon {
-            width: 40px;
-            height: 40px;
+            width: 35px;
+            height: 35px;
             background: var(--accent);
-            border-radius: 10px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.2rem;
+            font-size: 1rem;
         }
         
         .service-title {
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             color: var(--primary);
             font-weight: 600;
         }
         
         .service-list {
-            margin-top: 15px;
+            margin-top: 10px;
         }
         
         .service-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 0;
+            padding: 10px 0;
             border-bottom: 1px solid #e2e8f0;
         }
         
@@ -719,12 +842,12 @@ ob_end_flush();
         .service-name {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
         
         .service-badge {
-            width: 15px;
-            height: 15px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
         }
         
@@ -733,6 +856,7 @@ ob_end_flush();
         .service-udara { background: var(--warning); }
         
         .service-label {
+            font-size: 0.9rem;
             font-weight: 500;
             color: var(--secondary);
         }
@@ -740,397 +864,240 @@ ob_end_flush();
         .service-count {
             font-weight: 600;
             color: var(--primary);
-            font-size: 1.1rem;
+            font-size: 1rem;
         }
         
-        /* TODAY'S ACTIVITIES */
-        .todays-activities {
-            background: var(--light);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-        }
-        
-        .activities-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .date-badge {
-            background: var(--accent);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-        
-        .activity-list {
-            margin-top: 15px;
-        }
-        
-        .activity-card {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-left: 5px solid var(--accent);
-            transition: transform 0.3s;
-            cursor: pointer;
-        }
-        
-        .activity-card:hover {
-            transform: translateX(5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        
-        .activity-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 10px;
-        }
-        
-        .activity-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--primary);
-        }
-        
-        .activity-time-badge {
-            padding: 4px 12px;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            background: rgba(49, 130, 206, 0.1);
-            color: var(--accent);
-            white-space: nowrap;
-        }
-        
-        .activity-details {
-            color: #718096;
-            font-size: 0.9rem;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .activity-location {
-            color: var(--accent);
-        }
-        
-        .activity-creator {
-            color: var(--secondary);
-            font-weight: 500;
-        }
-        
-        .activity-stats {
-            display: flex;
-            gap: 15px;
-            margin-top: 10px;
-        }
-        
-        .stat-pill {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            padding: 4px 10px;
-            background: #f7fafc;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            color: var(--secondary);
-        }
-        
-        .stat-pill i {
-            font-size: 0.8rem;
-        }
-        
-        .no-activities {
-            text-align: center;
-            padding: 30px 20px;
-            color: var(--secondary);
-        }
-        
-        .no-activities i {
-            font-size: 2.5rem;
-            opacity: 0.3;
-            margin-bottom: 10px;
-        }
-        
-        /* FOOTER */
+        /* FOOTER - COMPACT */
         .dashboard-footer {
             background: var(--secondary);
             color: white;
-            padding: 25px 30px;
+            padding: 12px 25px;
             text-align: center;
-            border-top: 5px solid var(--accent);
+            font-size: 0.85rem;
+            border-top: 3px solid var(--accent);
         }
         
-        .footer-text {
-            opacity: 0.9;
-            line-height: 1.6;
+        /* RESPONSIVE ADJUSTMENTS */
+        @media (max-width: 1400px) {
+            .functions-grid {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            }
         }
         
-        /* RESPONSIVE */
-        @media (max-width: 1100px) {
+        @media (max-width: 1200px) {
+            .dashboard-main {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
             .stats-grid {
                 grid-template-columns: repeat(3, 1fr);
-            }
-            
-            .header-top {
-                flex-direction: column;
-                gap: 20px;
-                align-items: flex-start;
-            }
-            
-            .header-logo {
-                align-self: flex-start;
             }
         }
         
         @media (max-width: 992px) {
-            .dashboard-main {
+            .dashboard-header {
                 grid-template-columns: 1fr;
+                text-align: center;
+                gap: 10px;
+            }
+            
+            .user-info {
+                justify-content: center;
             }
             
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
-            
-            .activity-feed {
-                max-height: 300px;
-            }
-            
-            .user-info {
-                flex-direction: column;
-                gap: 15px;
-            }
-            
-            .logout-section {
-                flex-direction: column;
-                gap: 15px;
-                align-items: flex-start;
-            }
         }
         
         @media (max-width: 768px) {
-            .functions-grid {
+            .dashboard-main {
                 grid-template-columns: 1fr;
-            }
-            
-            .system-titles h1 {
-                font-size: 2rem;
             }
             
             .stats-grid {
                 grid-template-columns: 1fr;
             }
             
-            .activities-header {
-                flex-direction: column;
-                gap: 10px;
-                align-items: flex-start;
-            }
-            
-            .activity-header {
-                flex-direction: column;
-                gap: 10px;
+            .functions-grid {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             }
             
             .activity-stats {
-                flex-wrap: wrap;
-            }
-            
-            .service-header {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 10px;
-            }
-            
-            .logo-circle {
-                width: 70px;
-                height: 70px;
             }
         }
         
         @media (max-width: 480px) {
-            .header-top {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
+            .functions-grid {
+                grid-template-columns: 1fr;
             }
             
-            .system-info {
+            .activity-header {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 5px;
             }
             
-            .logo-circle {
-                width: 60px;
-                height: 60px;
+            .date-badge {
+                align-self: flex-start;
             }
         }
     </style>
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- HEADER -->
+        <!-- COMPACT HEADER -->
         <header class="dashboard-header">
-            <div class="header-top">
-                <div class="system-info">
-                    <div class="system-titles">
-                        <h1>CAAMS</h1>
-                        <p>Centralized Attendance & Allowance Management System</p>
-                    </div>
-                </div>
-                
-                <!-- UPDATED: SINGLE LOGO ON RIGHT SIDE -->
-                <div class="header-logo">
-                    <div class="logo-circle" title="UPNM Logo">
-                        <img src="../assets/upnm.png" alt="UPNM Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\"fas fa-university\" style=\"color:#3182ce; font-size:2rem;\"></i>'">
-                    </div>
+            
+    
+            <div class="system-titles">
+                <h1>CAAMS</h1>
+                <p>Centralized Attendance & Allowance Management System for ROTU UPNM</p>
+            </div>
+            <div> <div class="logo-circle" title="UPNM Logo">
+                    <img src="../assets/upnm.png" alt="UPNM Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\"fas fa-university\" style=\"color:#3182ce; font-size:1.5rem; line-height:70px;\"></i>'">
                 </div>
             </div>
-            
             <div class="user-info">
                 <div class="user-details">
-                    <h3>Welcome, <?php echo safeDisplay($user['name'] ?? 'Admin'); ?></h3>
-                    <p>Admin ID: <?php echo safeDisplay($user['military_number'] ?? 'ADMIN001'); ?> | Role: Administrator</p>
-                    <p style="font-size: 0.8rem; opacity: 0.7; margin-top: 5px;">
-                        <i class="far fa-calendar"></i> <?php echo date('l, d F Y'); ?>
-                    </p>
+                    <h3><?php echo safeDisplay($user['name'] ?? 'Admin'); ?></h3>
+                    <p>Admin ID: <?php echo safeDisplay($user['military_number'] ?? 'ADMIN001'); ?></p>
                 </div>
-                
-                <div class="logout-section">
-                    <a href="../logout.php" class="logout-btn" onclick="return confirm('Log out of system?')">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </a>
-                </div>
+               
+            
+            <div>
+                <a href="../logout.php" class="logout-btn" onclick="return confirm('Log out of system?')">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
             </div>
         </header>
         
-        <!-- STATISTICS - ALL REAL-TIME DATA -->
-        <div class="stats-grid">
-            <div class="stat-card cadets">
-                <div class="stat-icon">
-                    <i class="fas fa-users"></i>
+        <!-- COMPACT STATISTICS -->
+        <section class="stats-section">
+            <div class="stats-grid">
+                <div class="stat-card cadets">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-number"><?php echo safeNumber($stats['cadets']); ?></div>
+                    <div class="stat-label">Total Cadets</div>
+                    <div class="stat-subtext">Live database</div>
                 </div>
-                <div class="stat-number"><?php echo safeNumber($stats['cadets']); ?></div>
-                <div class="stat-label">Total Cadets</div>
-                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
-            </div>
-            
-            <div class="stat-card sessions">
-                <div class="stat-icon">
-                    <i class="fas fa-calendar-alt"></i>
-                </div>
-                <div class="stat-number"><?php echo safeNumber($stats['sessions']); ?></div>
-                <div class="stat-label">This Month's Sessions</div>
-                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
-            </div>
-            
-            <div class="stat-card pending">
-                <div class="stat-icon">
-                    <i class="fas fa-clock"></i>
-                </div>
-                <div class="stat-number"><?php echo safeNumber($pendingActions); ?></div>
-                <div class="stat-label">Pending Actions</div>
-                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
-            </div>
-            
-            <div class="stat-card attendance">
-                <div class="stat-icon">
-                    <i class="fas fa-clipboard-check"></i>
-                </div>
-                <div class="stat-number"><?php echo safeNumber($stats['attendance_today']); ?></div>
-                <div class="stat-label">Today's Attendance</div>
-                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
-            </div>
-            
-            <div class="stat-card rate">
-                <div class="stat-icon">
-                    <i class="fas fa-chart-line"></i>
-                </div>
-                <div class="stat-number"><?php echo safeNumber($stats['avg_attendance'], 1); ?>%</div>
-                <div class="stat-label">Average Attendance</div>
-                <small style="color: #718096; font-size: 0.8rem;">Live from database</small>
-            </div>
-        </div>
-        
-        <!-- MAIN CONTENT -->
-        <main class="dashboard-main">
-            <!-- LEFT COLUMN: Functions & Today's Activities -->
-            <div class="functions-section">
-                <h2 class="section-title">
-                    <i class="fas fa-sliders-h"></i> Dashboard
-                </h2>
                 
-                <!-- Functions Grid -->
-                <div class="functions-grid">
-                    <a href="register_user.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-user-plus"></i>
-                        </div>
-                        <h3 class="card-title">Register User</h3>
-                        <p class="card-desc">Register new users, update user information, and manage user roles and permissions.</p>
-                    </a>
-
-                    <a href="list_cadets.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-list-ol"></i>
-                        </div>
-                        <h3 class="card-title">Cadets & Rankholders list</h3>
-                        <p class="card-desc">View and filter cadets by service type and rank level with statistics.</p>
-                    </a>
-                    
-                    <a href="jana_aktiviti.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-calendar-plus"></i>
-                        </div>
-                        <h3 class="card-title">Generate Activity</h3>
-                        <p class="card-desc">Create new training sessions and manage training activities.</p>
-                    </a>
-                    
-                    <a href="manage_attendance.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-clipboard-check"></i>
-                        </div>
-                        <h3 class="card-title">Manage Attendance</h3>
-                        <p class="card-desc">View, verify, and manage cadet attendance records from all training sessions.</p>
-                    </a>
-                    
-                    <a href="manage_excuses.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-file-medical"></i>
-                        </div>
-                        <h3 class="card-title">Manage Excuses</h3>
-                        <p class="card-desc">Review and approve/reject cadet leave requests with proof documentation.</p>
-                    </a>
-                    
-                    <a href="manage_allowance.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-money-bill-wave"></i>
-                        </div>
-                        <h3 class="card-title">Manage Allowance</h3>
-                        <p class="card-desc">Calculate and manage cadet allowances based on attendance and performance.</p>
-                    </a>
-                    
-                    <a href="reports.php" class="function-card">
-                        <div class="card-icon">
-                            <i class="fas fa-chart-line"></i>
-                        </div>
-                        <h3 class="card-title">Final Reports</h3>
-                        <p class="card-desc">Generate comprehensive reports and export data for analysis and record-keeping.</p>
-                    </a>
+                <div class="stat-card sessions">
+                    <div class="stat-icon">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <div class="stat-number"><?php echo safeNumber($stats['sessions']); ?></div>
+                    <div class="stat-label">Monthly Sessions</div>
+                    <div class="stat-subtext">This month</div>
                 </div>
+                
+                <div class="stat-card pending">
+                    <div class="stat-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-number"><?php echo safeNumber($pendingActions); ?></div>
+                    <div class="stat-label">Pending Actions</div>
+                    <div class="stat-subtext">Require attention</div>
+                </div>
+                
+                <div class="stat-card attendance">
+                    <div class="stat-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <div class="stat-number"><?php echo safeNumber($stats['attendance_today']); ?></div>
+                    <div class="stat-label">Today's Attendance</div>
+                    <div class="stat-subtext">Present today</div>
+                </div>
+                
+                <div class="stat-card rate">
+                    <div class="stat-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stat-number"><?php echo safeNumber($stats['avg_attendance'], 1); ?>%</div>
+                    <div class="stat-label">Avg. Attendance</div>
+                    <div class="stat-subtext">This month</div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- MAIN DASHBOARD CONTENT - ALL IN ONE VIEW -->
+        <main class="dashboard-main">
+            <!-- LEFT PANEL: Functions & Today's Activities -->
+            <div class="left-panel">
+                <!-- FUNCTIONS GRID -->
+                <section class="functions-section">
+                    <h2 class="section-title">
+                        <i class="fas fa-sliders-h"></i> Admin Functions
+                    </h2>
+                    
+                    <div class="functions-grid">
+                        <a href="register_user.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-user-plus"></i>
+                            </div>
+                            <h3 class="card-title">Register User</h3>
+                            <p class="card-desc">Add new users and manage roles</p>
+                        </a>
+
+                        <a href="list_cadets.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-list-ol"></i>
+                            </div>
+                            <h3 class="card-title">Cadets & Rankholders</h3>
+                            <p class="card-desc">View and manage cadets list</p>
+                        </a>
+                        
+                        <a href="jana_aktiviti.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-calendar-plus"></i>
+                            </div>
+                            <h3 class="card-title">Generate Activity</h3>
+                            <p class="card-desc">Create training sessions</p>
+                        </a>
+                        
+                        <a href="manage_attendance.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-clipboard-check"></i>
+                            </div>
+                            <h3 class="card-title">Manage Attendance</h3>
+                            <p class="card-desc">Verify attendance records</p>
+                        </a>
+                        
+                        <a href="manage_excuses.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-file-medical"></i>
+                            </div>
+                            <h3 class="card-title">Manage Excuses</h3>
+                            <p class="card-desc">Approve leave requests</p>
+                        </a>
+                        
+                        <a href="manage_allowance.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <h3 class="card-title">Manage Allowance</h3>
+                            <p class="card-desc">Calculate cadet allowances</p>
+                        </a>
+                        
+                        <a href="reports.php" class="function-card">
+                            <div class="card-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <h3 class="card-title">Final Reports</h3>
+                            <p class="card-desc">Generate reports & exports</p>
+                        </a>
+                    </div>
+                </section>
                 
                 <!-- TODAY'S ACTIVITIES -->
-                <div class="todays-activities">
+                <section class="todays-activities">
                     <div class="activities-header">
-                        <h3 class="section-title" style="font-size: 1.5rem; margin-bottom: 0; border-bottom: none;">
+                        <h3 class="section-title" style="font-size: 1.1rem; margin-bottom: 0; border-bottom: none;">
                             <i class="fas fa-calendar-day"></i> Today's Activities
                         </h3>
                         <div class="date-badge">
@@ -1142,17 +1109,17 @@ ob_end_flush();
                         <?php if ($todayActivitiesResult && $todayActivitiesResult->num_rows > 0): 
                             while($activity = $todayActivitiesResult->fetch_assoc()): 
                                 $sessionLabels = [
-                                    'pagi' => 'Morning (06:00-10:00)',
-                                    'tengah hari' => 'Noon (10:00-14:00)',
-                                    'petang' => 'Afternoon (14:00-18:00)',
-                                    'malam' => 'Night (18:00-22:00)'
+                                    'pagi' => 'Morning',
+                                    'tengah hari' => 'Noon',
+                                    'petang' => 'Afternoon',
+                                    'malam' => 'Night'
                                 ];
                                 
                                 $attendancePercent = ($activity['total_count'] > 0) 
                                     ? round(($activity['present_count'] / $activity['total_count']) * 100, 1) 
                                     : 0;
                         ?>
-                        <div class="activity-card">
+                        <div class="activity-card" onclick="window.location.href='manage_attendance.php'">
                             <div class="activity-header">
                                 <div class="activity-title">
                                     <?php echo safeDisplay($activity['training_type']); ?>
@@ -1163,11 +1130,11 @@ ob_end_flush();
                             </div>
                             
                             <div class="activity-details">
-                                <span class="activity-location">
+                                <span title="Location">
                                     <i class="fas fa-map-marker-alt"></i> 
                                     <?php echo safeDisplay($activity['location']); ?>
                                 </span>
-                                <span class="activity-creator">
+                                <span title="Created by">
                                     <i class="fas fa-user-tie"></i> 
                                     <?php echo safeDisplay($activity['creator']); ?>
                                 </span>
@@ -1179,10 +1146,6 @@ ob_end_flush();
                                     <?php echo safeNumber($activity['present_count']); ?> present
                                 </div>
                                 <div class="stat-pill">
-                                    <i class="fas fa-users"></i>
-                                    <?php echo safeNumber($activity['total_count']); ?> total
-                                </div>
-                                <div class="stat-pill" style="color: var(--accent); font-weight: 600;">
                                     <i class="fas fa-chart-line"></i>
                                     <?php echo safeNumber($attendancePercent, 1); ?>%
                                 </div>
@@ -1192,145 +1155,132 @@ ob_end_flush();
                         
                         <?php else: ?>
                         <div class="no-activities">
-                            <i class="fas fa-calendar-times"></i>
-                            <h4>No Activities Today</h4>
-                            <p>No training sessions scheduled for today.</p>
-                            <a href="jana_aktiviti.php" class="btn" style="background: var(--accent); color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px;">
-                                <i class="fas fa-plus-circle"></i> Generate Activity
-                            </a>
+                            <i class="fas fa-calendar-times" style="font-size: 1.5rem;"></i>
+                            <p style="margin-top: 8px;">No training sessions today</p>
                         </div>
                         <?php endif; ?>
                     </div>
-                </div>
+                </section>
             </div>
             
-            <!-- RIGHT COLUMN: Activity Feed & Service Distribution -->
-            <div class="activity-section">
-                <h2 class="section-title">
-                    <i class="fas fa-history"></i> Recent Activity
-                </h2>
-                
-                <div class="activity-feed">
-                    <!-- Activity 1: Latest cadet registered -->
-                    <div class="activity-item">
-                        <div class="activity-icon" style="background: #4299e1;">
-                            <i class="fas fa-user-plus"></i>
-                        </div>
-                        <div class="activity-content">
-                            <h4>
-                                <?php if ($latestCadet): ?>
-                                    Cadet <strong><?php echo safeDisplay($latestCadet['name']); ?></strong> registered
-                                <?php else: ?>
-                                    No cadets registered
-                                <?php endif; ?>
-                            </h4>
-                            <p class="activity-time">
-                                <i class="far fa-clock"></i>
-                                <?php echo timeAgo($latestCadet['created_at'] ?? null); ?>
-                            </p>
-                        </div>
-                    </div>
+            <!-- RIGHT PANEL: Activity Feed & Service Distribution -->
+            <div class="right-panel">
+                <!-- ACTIVITY FEED -->
+                <section class="activity-feed-section">
+                    <h2 class="section-title">
+                        <i class="fas fa-history"></i> Recent Activity
+                    </h2>
                     
-                    <!-- Activity 2: Latest training session created -->
-                    <div class="activity-item">
-                        <div class="activity-icon" style="background: #ed8936;">
-                            <i class="fas fa-calendar-plus"></i>
-                        </div>
-                        <div class="activity-content">
-                            <h4>
-                                <?php if ($latestSession): ?>
-                                    <strong><?php echo safeDisplay($latestSession['training_type']); ?></strong> session
-                                    <?php if ($latestSession['location']): ?>
-                                        at <strong><?php echo safeDisplay($latestSession['location']); ?></strong>
+                    <div class="activity-feed">
+                        <!-- Activity 1: Latest cadet registered -->
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: #4299e1;">
+                                <i class="fas fa-user-plus"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>
+                                    <?php if ($latestCadet): ?>
+                                        Cadet <strong><?php echo safeDisplay($latestCadet['name']); ?></strong> registered
+                                    <?php else: ?>
+                                        No cadets registered
                                     <?php endif; ?>
-                                    created
-                                <?php else: ?>
-                                    No training sessions created
-                                <?php endif; ?>
-                            </h4>
-                            <p class="activity-time">
-                                <i class="far fa-clock"></i>
-                                <?php echo timeAgo($latestSession['created_at'] ?? null); ?>
-                            </p>
+                                </h4>
+                                <p class="activity-time">
+                                    <i class="far fa-clock"></i>
+                                    <?php echo timeAgo($latestCadet['created_at'] ?? null); ?>
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Activity 3: Latest attendance update -->
-                    <div class="activity-item">
-                        <div class="activity-icon" style="background: #48bb78;">
-                            <i class="fas fa-clipboard-check"></i>
-                        </div>
-                        <div class="activity-content">
-                            <h4>
-                                <?php if ($latestAttendance): ?>
-                                    <strong><?php echo safeDisplay($latestAttendance['name']); ?></strong>'s attendance
-                                    <?php if ($latestAttendance['training_type']): ?>
-                                        for <strong><?php echo safeDisplay($latestAttendance['training_type']); ?></strong>
+                        
+                        <!-- Activity 2: Latest training session created -->
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: #ed8936;">
+                                <i class="fas fa-calendar-plus"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>
+                                    <?php if ($latestSession): ?>
+                                        <strong><?php echo safeDisplay($latestSession['training_type']); ?></strong> session created
+                                    <?php else: ?>
+                                        No training sessions
                                     <?php endif; ?>
-                                    updated
-                                <?php else: ?>
-                                    No attendance updated
-                                <?php endif; ?>
-                            </h4>
-                            <p class="activity-time">
-                                <i class="far fa-clock"></i>
-                                <?php echo timeAgo($latestAttendance['recorded_at'] ?? null); ?>
-                            </p>
+                                </h4>
+                                <p class="activity-time">
+                                    <i class="far fa-clock"></i>
+                                    <?php echo timeAgo($latestSession['created_at'] ?? null); ?>
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Activity 4: Latest leave approval -->
-                    <div class="activity-item">
-                        <div class="activity-icon" style="background: #9f7aea;">
-                            <i class="fas fa-file-medical"></i>
-                        </div>
-                        <div class="activity-content">
-                            <h4>
-                                <?php if ($latestLeave): ?>
-                                    <strong><?php echo safeDisplay($latestLeave['name']); ?></strong>'s leave approved
-                                    <?php if ($latestLeave['reason']): ?>
-                                        <br><small><?php echo safeDisplay(substr($latestLeave['reason'], 0, 50)); ?><?php echo strlen($latestLeave['reason']) > 50 ? '...' : ''; ?></small>
+                        
+                        <!-- Activity 3: Latest attendance update -->
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: #48bb78;">
+                                <i class="fas fa-clipboard-check"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>
+                                    <?php if ($latestAttendance): ?>
+                                        <strong><?php echo safeDisplay($latestAttendance['name']); ?></strong>'s attendance updated
+                                    <?php else: ?>
+                                        No attendance updated
                                     <?php endif; ?>
-                                <?php else: ?>
-                                    No leaves approved
-                                <?php endif; ?>
-                            </h4>
-                            <p class="activity-time">
-                                <i class="far fa-clock"></i>
-                                <?php echo timeAgo($latestLeave['checked_at'] ?? null); ?>
-                            </p>
+                                </h4>
+                                <p class="activity-time">
+                                    <i class="far fa-clock"></i>
+                                    <?php echo timeAgo($latestAttendance['recorded_at'] ?? null); ?>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Activity 4: Latest leave approval -->
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: #9f7aea;">
+                                <i class="fas fa-file-medical"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>
+                                    <?php if ($latestLeave): ?>
+                                        <strong><?php echo safeDisplay($latestLeave['name']); ?></strong>'s leave approved
+                                    <?php else: ?>
+                                        No leaves approved
+                                    <?php endif; ?>
+                                </h4>
+                                <p class="activity-time">
+                                    <i class="far fa-clock"></i>
+                                    <?php echo timeAgo($latestLeave['checked_at'] ?? null); ?>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Activity 5: Latest allowance calculation -->
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: #f56565;">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>
+                                    <?php if ($latestAllowance): ?>
+                                        <strong><?php echo safeDisplay($latestAllowance['name']); ?></strong>'s allowance: RM <?php echo safeNumber($latestAllowance['total_amount'] ?? 0, 2); ?>
+                                    <?php else: ?>
+                                        No allowances
+                                    <?php endif; ?>
+                                </h4>
+                                <p class="activity-time">
+                                    <i class="far fa-clock"></i>
+                                    <?php echo timeAgo($latestAllowance['calculated_at'] ?? null); ?>
+                                </p>
+                            </div>
                         </div>
                     </div>
-                    
-                    <!-- Activity 5: Latest allowance calculation -->
-                    <div class="activity-item">
-                        <div class="activity-icon" style="background: #f56565;">
-                            <i class="fas fa-chart-line"></i>
-                        </div>
-                        <div class="activity-content">
-                            <h4>
-                                <?php if ($latestAllowance): ?>
-                                    <strong><?php echo safeDisplay($latestAllowance['name']); ?></strong>'s allowance calculated: 
-                                    <strong>RM <?php echo safeNumber($latestAllowance['total_amount'] ?? 0, 2); ?></strong>
-                                <?php else: ?>
-                                    No allowances calculated
-                                <?php endif; ?>
-                            </h4>
-                            <p class="activity-time">
-                                <i class="far fa-clock"></i>
-                                <?php echo timeAgo($latestAllowance['calculated_at'] ?? null); ?>
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                </section>
                 
                 <!-- SERVICE DISTRIBUTION -->
-                <div class="service-distribution">
+                <section class="service-distribution">
                     <div class="service-header">
                         <div class="service-icon">
                             <i class="fas fa-chart-pie"></i>
                         </div>
-                        <h3 class="service-title">Cadet Service Distribution</h3>
+                        <h3 class="service-title">Service Distribution</h3>
                     </div>
                     
                     <div class="service-list">
@@ -1358,16 +1308,15 @@ ob_end_flush();
                             <div class="service-count"><?php echo safeNumber($serviceStats['udara']); ?></div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </main>
         
-        <!-- FOOTER -->
+        <!-- COMPACT FOOTER -->
         <footer class="dashboard-footer">
             <p class="footer-text">
-                CAAMS Admin Dashboard<br>
-                PALAPES Headquarters, National Defence University of Malaysia<br>
-                &copy; 2026 Centralized Attendance & Allowance Management System
+                CAAMS Admin Dashboard | PALAPES Headquarters, National Defence University of Malaysia
+                <br>&copy; 2026 Centralized Attendance & Allowance Management System
             </p>
         </footer>
     </div>
@@ -1380,35 +1329,31 @@ ob_end_flush();
         
         // Card hover effects
         document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.function-card, .activity-card');
+            const cards = document.querySelectorAll('.function-card, .activity-card, .stat-card');
             
             cards.forEach(card => {
                 card.addEventListener('mouseenter', function() {
-                    this.style.transform = this.classList.contains('function-card') 
-                        ? 'translateY(-5px)' 
-                        : 'translateX(5px)';
+                    if (this.classList.contains('function-card')) {
+                        this.style.transform = 'translateY(-3px)';
+                    } else if (this.classList.contains('activity-card')) {
+                        this.style.transform = 'translateX(3px)';
+                    } else if (this.classList.contains('stat-card')) {
+                        this.style.transform = 'translateY(-2px)';
+                    }
                 });
                 
                 card.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0)';
+                    this.style.transform = '';
                 });
             });
             
-            // Update current time
+            // Update current time in header
             function updateTime() {
                 const now = new Date();
-                const timeElement = document.querySelector('.user-details p:last-child');
-                if (timeElement) {
-                    const options = { 
-                        weekday: 'long', 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true
-                    };
-                    timeElement.innerHTML = `<i class="far fa-calendar"></i> ${now.toLocaleDateString('en-MY', options)}`;
+                const timeElement = document.querySelector('.user-details');
+                if (timeElement && timeElement.children.length > 1) {
+                    timeElement.children[1].innerHTML = 
+                        'Last update: ' + now.toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
                 }
             }
             
@@ -1416,58 +1361,67 @@ ob_end_flush();
             updateTime();
             setInterval(updateTime, 60000);
             
-            // Logout confirmation
-            const logoutBtn = document.querySelector('.logout-btn');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', function(e) {
-                    if (!confirm('Are you sure you want to log out?')) {
-                        e.preventDefault();
-                    }
+            // Smooth scroll for all scrollable areas
+            const scrollableElements = document.querySelectorAll('.activity-list, .activity-feed, .functions-grid');
+            scrollableElements.forEach(element => {
+                element.addEventListener('wheel', function(e) {
+                    e.preventDefault();
+                    this.scrollTop += e.deltaY;
                 });
-            }
+            });
             
-            // Add loading animation to function cards when clicked
+            // Add click effect to function cards
             document.querySelectorAll('.function-card').forEach(card => {
-                card.addEventListener('click', function(e) {
-                    this.style.opacity = '0.7';
-                    setTimeout(() => {
-                        this.style.opacity = '1';
-                    }, 500);
-                });
-            });
-            
-            // Click on activity cards to go to attendance management
-            document.querySelectorAll('.activity-card').forEach(card => {
                 card.addEventListener('click', function() {
-                    window.location.href = 'manage_attendance.php';
+                    this.style.backgroundColor = '#e2e8f0';
+                    setTimeout(() => {
+                        this.style.backgroundColor = '';
+                    }, 200);
                 });
             });
             
-            // Smooth scroll for activity feed
-            const activityFeed = document.querySelector('.activity-feed');
-            if (activityFeed) {
-                activityFeed.addEventListener('wheel', function(e) {
-                    if (e.deltaY > 0) {
-                        this.scrollTop += 50;
-                    } else {
-                        this.scrollTop -= 50;
-                    }
-                });
-            }
-            
-            // Add hover effect to logo
+            // Logo hover effect
             const logoCircle = document.querySelector('.logo-circle');
             if (logoCircle) {
                 logoCircle.addEventListener('mouseenter', function() {
-                    this.style.transform = 'scale(1.05)';
-                    this.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
+                    this.style.transform = 'scale(1.1)';
                 });
                 
                 logoCircle.addEventListener('mouseleave', function() {
-                    this.style.transform = 'scale(1)';
-                    this.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)';
+                    this.style.transform = '';
                 });
             }
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Refresh dashboard with F5
+                if (e.key === 'F5') {
+                    e.preventDefault();
+                    location.reload();
+                }
+                // Escape to go back
+                if (e.key === 'Escape') {
+                    window.history.back();
+                }
+            });
+            
+            // Highlight stats that need attention
+            const pendingStat = document.querySelector('.stat-card.pending .stat-number');
+            if (pendingStat && parseInt(pendingStat.textContent) > 0) {
+                pendingStat.style.animation = 'pulse 2s infinite';
+                document.querySelector('.stat-card.pending').style.boxShadow = '0 0 0 2px rgba(245, 101, 101, 0.3)';
+            }
+            
+            // Add CSS animation for pulse effect
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes pulse {
+                    0% { opacity: 1; }
+                    50% { opacity: 0.7; }
+                    100% { opacity: 1; }
+                }
+            `;
+            document.head.appendChild(style);
         });
     </script>
 </body>

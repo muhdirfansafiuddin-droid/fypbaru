@@ -1,5 +1,5 @@
 <?php
-// cadet/dashboard.php - VERSION TANPA CUTI SAKIT
+// cadet/dashboard.php - ENGLISH VERSION
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -30,7 +30,7 @@ try {
     $today = date('Y-m-d');
     $current_month = date('Y-m');
     $current_year = date('Y');
-    $user_name = $user['name'] ?? 'Kadet';
+    $user_name = $user['name'] ?? 'Cadet';
     
     // Get attendance period from URL or default to 'week'
     $period = $_GET['period'] ?? 'week';
@@ -40,22 +40,22 @@ try {
         case 'month':
             $start_date = date('Y-m-01');
             $end_date = date('Y-m-t');
-            $period_label = 'Bulan Ini';
+            $period_label = 'This Month';
             break;
         case 'year':
             $start_date = date('Y-01-01');
             $end_date = date('Y-12-31');
-            $period_label = 'Tahun Ini';
+            $period_label = 'This Year';
             break;
         case 'week':
         default:
             $start_date = date('Y-m-d', strtotime('-6 days'));
             $end_date = date('Y-m-d');
-            $period_label = 'Minggu Ini';
+            $period_label = 'This Week';
             break;
     }
     
-    // 1. STATISTIK KEHADIRAN BERDASARKAN PERIOD (TANPA CUTI SAKIT)
+    // 1. ATTENDANCE STATISTICS BASED ON PERIOD
     $periodStatsQuery = "SELECT 
                         COUNT(*) as total_period,
                         SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_period,
@@ -76,7 +76,7 @@ try {
     $periodResult = $periodStmt->get_result();
     $periodStats = $periodResult->fetch_assoc();
     
-    // Jika tidak ada data period ini, set default values
+    // If no data for this period, set default values
     if (!$periodStats || $periodStats['total_period'] === null) {
         $periodStats = [
             'total_period' => 0,
@@ -87,7 +87,7 @@ try {
         ];
     }
     
-    // 2. PERATUS KEHADIRAN KESELURUHAN
+    // 2. OVERALL ATTENDANCE PERCENTAGE
     $overallRateQuery = "SELECT 
                             COUNT(*) as total_all,
                             SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_all,
@@ -113,7 +113,7 @@ try {
         ];
     }
     
-    // 3. DATA ELAUN TERKINI
+    // 3. LATEST ALLOWANCE DATA
     $allowanceQuery = "SELECT 
                         month_year,
                         total_amount,
@@ -144,7 +144,7 @@ try {
     $performanceResult = $performanceStmt->get_result();
     $performanceData = $performanceResult->fetch_assoc();
     
-    // 5. KEHADIRAN DETAIL BERDASARKAN PERIOD
+    // 5. DETAILED ATTENDANCE BASED ON PERIOD
     $attendanceDetailQuery = "SELECT 
                                 a.date,
                                 a.status,
@@ -166,7 +166,7 @@ try {
     $detailStmt->execute();
     $detailResult = $detailStmt->get_result();
     
-    // 6. KEHADIRAN 7 HARI TERAKHIR UNTUK KALENDAR
+    // 6. LAST 7 DAYS ATTENDANCE FOR CALENDAR
     $last7DaysQuery = "SELECT 
                         DATE(date) as attendance_date,
                         status,
@@ -181,7 +181,7 @@ try {
     $last7DaysStmt->execute();
     $last7DaysResult = $last7DaysStmt->get_result();
     
-    // 7. INFO KADET
+    // 7. CADET INFO
     $cadetInfo = [
         'name' => $user['name'],
         'military_number' => $user['military_number'],
@@ -199,9 +199,9 @@ try {
 // Helper functions
 function getServiceLabel($type) {
     $labels = [
-        'darat' => 'Darat',
-        'laut' => 'Laut', 
-        'udara' => 'Udara'
+        'darat' => 'Land',
+        'laut' => 'Sea', 
+        'udara' => 'Air'
     ];
     return $labels[$type] ?? $type;
 }
@@ -217,15 +217,15 @@ function getRankLabel($rank) {
 
 function getStatusBadge($status, $is_excuse = null) {
     if ($status === 'present') {
-        return '<span class="status-badge present">Hadir</span>';
+        return '<span class="status-badge present">Present</span>';
     } elseif ($status === 'absent') {
         if ($is_excuse == 1) {
-            return '<span class="status-badge excuse">Pelepasan</span>';
+            return '<span class="status-badge excuse">Excused</span>';
         } else {
-            return '<span class="status-badge absent">Tidak Hadir</span>';
+            return '<span class="status-badge absent">Absent</span>';
         }
     }
-    return '<span class="status-badge unknown">Tiada Data</span>';
+    return '<span class="status-badge unknown">No Data</span>';
 }
 
 function getPerformanceColor($grade) {
@@ -260,20 +260,20 @@ function formatTime($timeString) {
 
 function getSessionTimeLabel($time) {
     $labels = [
-        'pagi' => 'Pagi',
-        'tengah hari' => 'Tengah Hari',
-        'petang' => 'Petang',
-        'malam' => 'Malam'
+        'pagi' => 'Morning',
+        'tengah hari' => 'Afternoon',
+        'petang' => 'Evening',
+        'malam' => 'Night'
     ];
     return $labels[$time] ?? ucfirst($time);
 }
 ?>
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Kadet - CAAMS</title>
+    <title>Cadet Dashboard - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -452,10 +452,10 @@ function getSessionTimeLabel($time) {
         
         .filter-btn {
             padding: 6px 12px;
-            border: 2px solid var(--gray-300);
+            border: 2px solid #e2e8f0;
             border-radius: 6px;
             background: white;
-            color: var(--gray-700);
+            color: var(--gray);
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -953,7 +953,7 @@ function getSessionTimeLabel($time) {
         <div class="header">
             <h1>
                 <i class="fas fa-tachometer-alt"></i>
-                Dashboard Kadet
+                Cadet Dashboard
             </h1>
             <div class="user-info">
                 <div class="user-details">
@@ -970,7 +970,7 @@ function getSessionTimeLabel($time) {
                     </div>
                 </div>
                 <button class="logout-btn" onclick="logout()">
-                    <i class="fas fa-sign-out-alt"></i> Log Keluar
+                    <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
             </div>
         </div>
@@ -979,20 +979,20 @@ function getSessionTimeLabel($time) {
         <div class="period-filter">
             <div class="filter-label">
                 <i class="fas fa-calendar-alt"></i>
-                Kehadiran <?php echo $period_label; ?>
+                Attendance <?php echo $period_label; ?>
             </div>
             <div class="filter-options">
                 <button class="filter-btn <?php echo $period === 'week' ? 'active' : ''; ?>" 
                         onclick="changePeriod('week')">
-                    Minggu
+                    Week
                 </button>
                 <button class="filter-btn <?php echo $period === 'month' ? 'active' : ''; ?>" 
                         onclick="changePeriod('month')">
-                    Bulan
+                    Month
                 </button>
                 <button class="filter-btn <?php echo $period === 'year' ? 'active' : ''; ?>" 
                         onclick="changePeriod('year')">
-                    Tahun
+                    Year
                 </button>
             </div>
         </div>
@@ -1002,10 +1002,10 @@ function getSessionTimeLabel($time) {
             <div class="section-header">
                 <h3 class="section-title">
                     <i class="fas fa-user-circle"></i>
-                    Maklumat Diri & Kehadiran
+                    Personal Info & Attendance
                 </h3>
                 <a href="update_profile.php" class="update-profile-btn">
-                    <i class="fas fa-user-edit"></i> Kemas Kini Profil
+                    <i class="fas fa-user-edit"></i> Update Profile
                 </a>
             </div>
             
@@ -1013,36 +1013,36 @@ function getSessionTimeLabel($time) {
                 <!-- PERSONAL INFO -->
                 <div class="personal-info-card">
                     <h4 style="color: var(--primary); margin-bottom: 15px; font-size: 0.95rem;">
-                        <i class="fas fa-id-card"></i> Maklumat Peribadi
+                        <i class="fas fa-id-card"></i> Personal Information
                     </h4>
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">Nama</div>
+                            <div class="info-label">Name</div>
                             <div class="info-value"><?php echo htmlspecialchars($cadetInfo['name']); ?></div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">No. Tentera</div>
+                            <div class="info-label">Military No.</div>
                             <div class="info-value"><?php echo $cadetInfo['military_number']; ?></div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Perkhidmatan</div>
+                            <div class="info-label">Service</div>
                             <div class="info-value"><?php echo getServiceLabel($cadetInfo['service_type']); ?></div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Pangkat</div>
+                            <div class="info-label">Rank</div>
                             <div class="info-value"><?php echo getRankLabel($cadetInfo['rank_level']); ?></div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Tarikh Mula</div>
+                            <div class="info-label">Join Date</div>
                             <div class="info-value"><?php echo formatDate($cadetInfo['join_date']); ?></div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Emel</div>
-                            <div class="info-value"><?php echo $cadetInfo['email'] ?? 'Tiada'; ?></div>
+                            <div class="info-label">Email</div>
+                            <div class="info-value"><?php echo $cadetInfo['email'] ?? 'N/A'; ?></div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Telefon</div>
-                            <div class="info-value"><?php echo $cadetInfo['phone'] ?? 'Tiada'; ?></div>
+                            <div class="info-label">Phone</div>
+                            <div class="info-value"><?php echo $cadetInfo['phone'] ?? 'N/A'; ?></div>
                         </div>
                     </div>
                 </div>
@@ -1050,39 +1050,39 @@ function getSessionTimeLabel($time) {
                 <!-- ATTENDANCE STATS -->
                 <div class="attendance-stats-card">
                     <h4 style="color: var(--primary); margin-bottom: 15px; font-size: 0.95rem;">
-                        <i class="fas fa-chart-bar"></i> Statistik <?php echo $period_label; ?>
+                        <i class="fas fa-chart-bar"></i> Statistics <?php echo $period_label; ?>
                     </h4>
                     
                     <div class="period-stats">
                         <div class="period-stat-item total-stat">
                             <div class="period-stat-value"><?php echo $periodStats['total_period']; ?></div>
-                            <div class="period-stat-label">JUMLAH</div>
+                            <div class="period-stat-label">TOTAL</div>
                         </div>
                         <div class="period-stat-item present-stat">
                             <div class="period-stat-value"><?php echo $periodStats['present_period']; ?></div>
-                            <div class="period-stat-label">HADIR</div>
+                            <div class="period-stat-label">PRESENT</div>
                         </div>
                         <div class="period-stat-item absent-stat">
                             <div class="period-stat-value"><?php echo $periodStats['absent_period']; ?></div>
-                            <div class="period-stat-label">TIDAK</div>
+                            <div class="period-stat-label">ABSENT</div>
                         </div>
                         <div class="period-stat-item excuse-stat">
                             <div class="period-stat-value"><?php echo $periodStats['excuse_period']; ?></div>
-                            <div class="period-stat-label">PELEPASAN</div>
+                            <div class="period-stat-label">EXCUSED</div>
                         </div>
                     </div>
                     
                     <!-- Progress Bar -->
                     <div class="progress-container">
                         <div class="progress-header">
-                            <div class="progress-title">Peratus Kehadiran <?php echo $period_label; ?></div>
+                            <div class="progress-title">Attendance Rate <?php echo $period_label; ?></div>
                             <div class="progress-percent"><?php echo $periodStats['attendance_rate_period']; ?>%</div>
                         </div>
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: <?php echo $periodStats['attendance_rate_period']; ?>%"></div>
                         </div>
                         <div class="progress-text">
-                            <?php echo $periodStats['present_period']; ?> daripada <?php echo $periodStats['total_period']; ?> sesi
+                            <?php echo $periodStats['present_period']; ?> out of <?php echo $periodStats['total_period']; ?> sessions
                         </div>
                     </div>
                 </div>
@@ -1096,9 +1096,9 @@ function getSessionTimeLabel($time) {
                     <i class="fas fa-calendar-check"></i>
                 </div>
                 <div class="stat-number"><?php echo $rateStats['attendance_rate']; ?>%</div>
-                <div class="stat-label">Peratus Kehadiran Keseluruhan</div>
+                <div class="stat-label">Overall Attendance Rate</div>
                 <div class="stat-subtext">
-                    <?php echo $rateStats['present_all']; ?> daripada <?php echo $rateStats['total_all']; ?> sesi
+                    <?php echo $rateStats['present_all']; ?> out of <?php echo $rateStats['total_all']; ?> sessions
                 </div>
             </div>
             
@@ -1115,13 +1115,13 @@ function getSessionTimeLabel($time) {
                     }
                     ?>
                 </div>
-                <div class="stat-label">Jumlah Elaun</div>
+                <div class="stat-label">Total Allowance</div>
                 <div class="stat-subtext">
                     <?php 
                     if ($allowanceData) {
-                        echo 'Bulan: ' . date('F Y', strtotime($allowanceData['month_year'] . '-01'));
+                        echo 'Month: ' . date('F Y', strtotime($allowanceData['month_year'] . '-01'));
                     } else {
-                        echo 'Tiada data elaun';
+                        echo 'No allowance data';
                     }
                     ?>
                 </div>
@@ -1134,10 +1134,10 @@ function getSessionTimeLabel($time) {
                 <div class="stat-number">
                     <?php echo $performanceData['performance_grade'] ?? 'N/A'; ?>
                 </div>
-                <div class="stat-label">Gred Prestasi</div>
+                <div class="stat-label">Performance Grade</div>
                 <div class="stat-subtext">
-                    Kehadiran: <?php echo $performanceData['attendance_score'] ?? '0'; ?>% • 
-                    Disiplin: <?php echo $performanceData['discipline_score'] ?? '0'; ?>%
+                    Attendance: <?php echo $performanceData['attendance_score'] ?? '0'; ?>% • 
+                    Discipline: <?php echo $performanceData['discipline_score'] ?? '0'; ?>%
                 </div>
             </div>
         </div>
@@ -1147,7 +1147,7 @@ function getSessionTimeLabel($time) {
             <div class="section-header">
                 <h3 class="section-title">
                     <i class="fas fa-list-check"></i>
-                    Rekod Kehadiran <?php echo $period_label; ?>
+                    Attendance Records <?php echo $period_label; ?>
                 </h3>
                 <span style="font-size: 0.8rem; color: var(--gray);">
                     <?php echo formatDate($start_date); ?> - <?php echo formatDate($end_date); ?>
@@ -1185,7 +1185,7 @@ function getSessionTimeLabel($time) {
             <?php else: ?>
             <div class="no-data">
                 <i class="fas fa-calendar-times"></i>
-                <p>Tiada kehadiran direkod untuk <?php echo strtolower($period_label); ?></p>
+                <p>No attendance recorded for <?php echo strtolower($period_label); ?></p>
             </div>
             <?php endif; ?>
         </div>
@@ -1194,7 +1194,7 @@ function getSessionTimeLabel($time) {
         <div class="attendance-calendar">
             <h3 class="section-title">
                 <i class="fas fa-calendar-week"></i>
-                7 Hari Terkini
+                Last 7 Days
             </h3>
             
             <?php 
@@ -1243,21 +1243,21 @@ function getSessionTimeLabel($time) {
             <div class="calendar-legend">
                 <div class="legend-item">
                     <div class="legend-color legend-present"></div>
-                    <span>Hadir</span>
+                    <span>Present</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color legend-absent"></div>
-                    <span>Tidak Hadir</span>
+                    <span>Absent</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color legend-excuse"></div>
-                    <span>Pelepasan</span>
+                    <span>Excused</span>
                 </div>
             </div>
             <?php else: ?>
             <div class="no-data">
                 <i class="fas fa-calendar-alt"></i>
-                <p>Tiada kehadiran direkod dalam 7 hari terakhir</p>
+                <p>No attendance recorded in the last 7 days</p>
             </div>
             <?php endif; ?>
         </div>
@@ -1276,27 +1276,27 @@ function getSessionTimeLabel($time) {
             <div class="mobile-nav-icon">
                 <i class="fas fa-money-bill"></i>
             </div>
-            <div class="mobile-nav-label">Elaun</div>
+            <div class="mobile-nav-label">Allowance</div>
         </a>
         
         <a href="apply_excuse.php" class="mobile-nav-item">
             <div class="mobile-nav-icon">
                 <i class="fas fa-file-medical"></i>
             </div>
-            <div class="mobile-nav-label">Pelepasan</div>
+            <div class="mobile-nav-label">Excuse</div>
         </a>
         
         <a href="view_performance.php" class="mobile-nav-item">
             <div class="mobile-nav-icon">
                 <i class="fas fa-chart-line"></i>
             </div>
-            <div class="mobile-nav-label">Prestasi</div>
+            <div class="mobile-nav-label">Performance</div>
         </a>
     </nav>
     
     <script>
         function logout() {
-            if (confirm('Adakah anda pasti ingin log keluar?')) {
+            if (confirm('Are you sure you want to logout?')) {
                 window.location.href = '../logout.php';
             }
         }
@@ -1305,7 +1305,7 @@ function getSessionTimeLabel($time) {
             window.location.href = 'dashboard.php?period=' + period;
         }
         
-        // Refresh dashboard setiap 60 saat
+        // Refresh dashboard every 60 seconds
         setInterval(() => {
             window.location.reload();
         }, 60000);

@@ -1,5 +1,5 @@
 <?php
-// cadet/view_allowance.php - VIEW ALLOWANCE FOR CADET WITH REAL-TIME CALCULATION (ENGLISH)
+// cadet/view_allowance.php - VIEW ALLOWANCE FOR CADET WITH REAL DATABASE DATA (ENGLISH)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -36,12 +36,15 @@ try {
     // Get selected month from URL or default to current month
     $selected_month = $_GET['month'] ?? $current_month;
     
-    // 1. GET ALLOWANCE DATA FROM DATABASE (if exists)
+    // 1. GET ALLOWANCE DATA FROM DATABASE (REAL DATA SAMA MACAM ADMIN)
     $allowanceQuery = "SELECT 
                         ac.calc_id,
                         ac.month_year,
                         ac.attendance_rate,
                         ac.training_days,
+                        ac.allowance_rate_junior,
+                        ac.allowance_rate_intermediate,
+                        ac.allowance_rate_senior,
                         ac.allowance_tempatan,
                         ac.allowance_berterusan,
                         ac.allowance_kem,
@@ -69,56 +72,51 @@ try {
     $allowanceResult = $allowanceStmt->get_result();
     $allowanceData = $allowanceResult->fetch_assoc();
     
-    // 2. GET LATEST RATES FROM ADMIN - REAL-TIME
+    // 2. GET LATEST RATES FROM allowance_calculations TABLE - REAL DATA
     $rateSql = "SELECT 
                 allowance_rate_junior,
                 allowance_rate_intermediate,
-                allowance_rate_senior,
-                training_rate_latihan_tempatan,
-                training_rate_latihan_berterusan,
-                training_rate_latihan_kem
-            FROM users 
-            WHERE role = 'admin' 
+                allowance_rate_senior
+            FROM allowance_calculations 
+            WHERE user_id = ? 
+            ORDER BY calculated_at DESC 
             LIMIT 1";
     
     $rateStmt = $db->prepare($rateSql);
+    $rateStmt->bind_param("i", $cadet_id);
     $rateStmt->execute();
     $rateResult = $rateStmt->get_result();
     $rates = $rateResult->fetch_assoc();
     
-    // Calculate local training rate (convert hourly to daily)
-    $local_rate_per_day = ($rates['training_rate_latihan_tempatan'] ?? 8.00) * 12;
+    // If no rates found from allowance_calculations, use default values
+    if (!$rates) {
+        $rates = [
+            'allowance_rate_junior' => 53.83,
+            'allowance_rate_intermediate' => 58.00,
+            'allowance_rate_senior' => 62.17
+        ];
+    }
     
-    // Training rates based on rank
+    // Training rates based on rank - REAL DATA
     $trainingRates = [
         'junior' => [
-            'continuous' => $rates['allowance_rate_junior'] ?? 53.83,
-            'camp' => $rates['allowance_rate_junior'] ?? 53.83,
-            'local' => $local_rate_per_day
+            'continuous' => $rates['allowance_rate_junior'],
+            'camp' => $rates['allowance_rate_junior'],
         ],
         'intermediate' => [
-            'continuous' => $rates['allowance_rate_intermediate'] ?? 58.00,
-            'camp' => $rates['allowance_rate_intermediate'] ?? 58.00,
-            'local' => $local_rate_per_day
+            'continuous' => $rates['allowance_rate_intermediate'],
+            'camp' => $rates['allowance_rate_intermediate'],
         ],
         'senior' => [
-            'continuous' => $rates['allowance_rate_senior'] ?? 62.17,
-            'camp' => $rates['allowance_rate_senior'] ?? 62.17,
-            'local' => $local_rate_per_day
+            'continuous' => $rates['allowance_rate_senior'],
+            'camp' => $rates['allowance_rate_senior'],
         ]
     ];
     
-    // Fixed rates (from admin page)
-    $fixedRates = [
-        'accreditation_per_day' => 62.20,
-        'bounty_all' => 43.33,
-        'clothing_senior' => 125.00
-    ];
-    
-    // Get cadet's rank rate
+    // Get cadet's rank rate - REAL DATA
     $cadetRate = $trainingRates[$rank_level] ?? $trainingRates['junior'];
     
-    // 3. GET ATTENDANCE RECORDS FOR SELECTED MONTH
+    // 3. GET ATTENDANCE RECORDS FOR SELECTED MONTH - REAL DATA
     $attendanceSql = "SELECT 
                         a.attendance_id,
                         a.date,
@@ -129,6 +127,7 @@ try {
                         ts.training_category,
                         ts.location,
                         ts.session_time,
+                        ts.training_date,
                         a.recorded_at
                     FROM attendance a
                     JOIN training_sessions ts ON a.session_id = ts.session_id
@@ -141,7 +140,7 @@ try {
     $attendanceStmt->execute();
     $attendanceResult = $attendanceStmt->get_result();
     
-    // 4. CALCULATE REAL-TIME ALLOWANCE
+    // 4. CALCULATE REAL-TIME ALLOWANCE BASED ON REAL ATTENDANCE
     $attendanceRecords = [];
     $attendanceDays = 0;
     $trainingBreakdown = [
@@ -151,19 +150,6 @@ try {
         'accreditation' => 0
     ];
     
-    // Get total sessions for the month
-    $monthStart = date('Y-m-01', strtotime($selected_month . '-01'));
-    $monthEnd = date('Y-m-t', strtotime($selected_month . '-01'));
-    
-    $totalSessionsSql = "SELECT COUNT(DISTINCT training_date) as total_sessions 
-                        FROM training_sessions 
-                        WHERE training_date BETWEEN ? AND ?";
-    $sessionsStmt = $db->prepare($totalSessionsSql);
-    $sessionsStmt->bind_param("ss", $monthStart, $monthEnd);
-    $sessionsStmt->execute();
-    $sessionsResult = $sessionsStmt->get_result();
-    $totalSessions = $sessionsResult->fetch_assoc()['total_sessions'] ?? 0;
-    
     // Process attendance records
     while ($attendance = $attendanceResult->fetch_assoc()) {
         $attendanceRecords[] = $attendance;
@@ -171,104 +157,187 @@ try {
         if ($attendance['status'] == 'present') {
             $attendanceDays++;
             
-            // Categorize by training type
+            // Categorize by training type - REAL DATA sama macam admin
             $training_type = strtolower($attendance['training_type']);
             $training_category = strtolower($attendance['training_category'] ?? '');
             
-            if (strpos($training_type, 'tempatan') !== false || strpos($training_type, 'baris') !== false || strpos($training_type, 'local') !== false) {
+            if (strpos($training_type, 'tempatan') !== false || 
+                strpos($training_type, 'baris') !== false || 
+                strpos($training_type, 'local') !== false ||
+                strpos($training_type, 'tempatan') !== false) {
                 $trainingBreakdown['local']++;
             } 
-            elseif (strpos($training_type, 'kem') !== false || strpos($training_type, 'camp') !== false) {
+            elseif (strpos($training_type, 'kem') !== false || 
+                    strpos($training_type, 'camp') !== false ||
+                    strpos($training_type, 'kem') !== false ||
+                    strpos($training_type, 'tahunan') !== false) {
                 $trainingBreakdown['camp']++;
             }
-            elseif (strpos($training_type, 'pentauliahan') !== false || strpos($training_type, 'accreditation') !== false) {
+            elseif (strpos($training_type, 'pentauliahan') !== false || 
+                    strpos($training_type, 'accreditation') !== false ||
+                    strpos($training_type, 'pentauliahan') !== false) {
                 $trainingBreakdown['accreditation']++;
             }
             else {
+                // Default to continuous training
                 $trainingBreakdown['continuous']++;
             }
         }
     }
     
-    // Calculate attendance rate
-    $attendanceRate = $totalSessions > 0 ? ($attendanceDays / $totalSessions) * 100 : 0;
-    
-    // Calculate training allowance REAL-TIME
-    $trainingAllowance = 0;
-    $trainingDetails = [];
-    
-    // Local Training
-    if ($trainingBreakdown['local'] > 0) {
-        $amount = $trainingBreakdown['local'] * $cadetRate['local'];
-        $trainingAllowance += $amount;
-        $trainingDetails[] = [
-            'type' => 'Local Training',
-            'days' => $trainingBreakdown['local'],
-            'rate' => $cadetRate['local'],
-            'amount' => $amount
-        ];
-    }
-    
-    // Continuous Training
-    if ($trainingBreakdown['continuous'] > 0) {
-        $amount = $trainingBreakdown['continuous'] * $cadetRate['continuous'];
-        $trainingAllowance += $amount;
-        $trainingDetails[] = [
-            'type' => 'Continuous Training',
-            'days' => $trainingBreakdown['continuous'],
-            'rate' => $cadetRate['continuous'],
-            'amount' => $amount
-        ];
-    }
-    
-    // Camp Training
-    if ($trainingBreakdown['camp'] > 0) {
-        $amount = $trainingBreakdown['camp'] * $cadetRate['camp'];
-        $trainingAllowance += $amount;
-        $trainingDetails[] = [
-            'type' => 'Camp Training',
-            'days' => $trainingBreakdown['camp'],
-            'rate' => $cadetRate['camp'],
-            'amount' => $amount
-        ];
-    }
-    
-    // Accreditation Training (Senior only)
-    if ($trainingBreakdown['accreditation'] > 0 && $rank_level == 'senior') {
-        $amount = $trainingBreakdown['accreditation'] * $fixedRates['accreditation_per_day'];
-        $trainingAllowance += $amount;
-        $trainingDetails[] = [
-            'type' => 'Accreditation Training',
-            'days' => $trainingBreakdown['accreditation'],
-            'rate' => $fixedRates['accreditation_per_day'],
-            'amount' => $amount
-        ];
-    }
-    
-    // Calculate additional allowances
-    $additionalAllowance = 0;
-    $additionalDetails = [];
-    
-    // Bounty for all
-    $additionalAllowance += $fixedRates['bounty_all'];
-    $additionalDetails[] = [
-        'type' => 'Bounty',
-        'amount' => $fixedRates['bounty_all']
-    ];
-    
-    // Clothing for senior only
-    if ($rank_level == 'senior') {
-        $additionalAllowance += $fixedRates['clothing_senior'];
+    // 5. IF ALLOWANCE DATA EXISTS (from admin calculation), USE REAL DATA
+    if ($allowanceData) {
+        $attendanceDays = $allowanceData['training_days'];
+        $attendanceRate = $allowanceData['attendance_rate'];
+        $trainingAllowance = $allowanceData['total_training'];
+        $additionalAllowance = $allowanceData['total_additional'];
+        $totalAmount = $allowanceData['total_amount'];
+        
+        // Get training breakdown from REAL DATA
+        $trainingDetails = [];
+        if ($allowanceData['allowance_tempatan'] > 0) {
+            $trainingDetails[] = [
+                'type' => 'Local Training',
+                'amount' => $allowanceData['allowance_tempatan']
+            ];
+        }
+        if ($allowanceData['allowance_berterusan'] > 0) {
+            $trainingDetails[] = [
+                'type' => 'Continuous Training',
+                'amount' => $allowanceData['allowance_berterusan']
+            ];
+        }
+        if ($allowanceData['allowance_kem'] > 0) {
+            $trainingDetails[] = [
+                'type' => 'Camp Training',
+                'amount' => $allowanceData['allowance_kem']
+            ];
+        }
+        if ($allowanceData['allowance_pentauliahan'] > 0) {
+            $trainingDetails[] = [
+                'type' => 'Accreditation Training',
+                'amount' => $allowanceData['allowance_pentauliahan']
+            ];
+        }
+        
+        // Additional allowances from REAL DATA
+        $additionalDetails = [];
+        if ($allowanceData['allowance_bounty'] > 0) {
+            $additionalDetails[] = [
+                'type' => 'Bounty',
+                'amount' => $allowanceData['allowance_bounty']
+            ];
+        }
+        if ($allowanceData['allowance_pakaian'] > 0) {
+            $additionalDetails[] = [
+                'type' => 'Clothing Allowance',
+                'amount' => $allowanceData['allowance_pakaian']
+            ];
+        }
+        
+    } else {
+        // If no allowance data from admin, calculate from attendance
+        $attendanceRate = 0;
+        
+        // Get total sessions for the month
+        $monthStart = date('Y-m-01', strtotime($selected_month . '-01'));
+        $monthEnd = date('Y-m-t', strtotime($selected_month . '-01'));
+        
+        $totalSessionsSql = "SELECT COUNT(DISTINCT training_date) as total_sessions 
+                            FROM training_sessions 
+                            WHERE training_date BETWEEN ? AND ?";
+        $sessionsStmt = $db->prepare($totalSessionsSql);
+        $sessionsStmt->bind_param("ss", $monthStart, $monthEnd);
+        $sessionsStmt->execute();
+        $sessionsResult = $sessionsStmt->get_result();
+        $totalSessions = $sessionsResult->fetch_assoc()['total_sessions'] ?? 0;
+        
+        // Calculate attendance rate
+        $attendanceRate = $totalSessions > 0 ? ($attendanceDays / $totalSessions) * 100 : 0;
+        
+        // Use default rates for local training (8.00 per hour × 12 hours)
+        $local_rate_per_day = 8.00 * 12; // RM 96.00 per day
+        
+        // Calculate training allowance REAL-TIME
+        $trainingAllowance = 0;
+        $trainingDetails = [];
+        
+        // Local Training
+        if ($trainingBreakdown['local'] > 0) {
+            $amount = $trainingBreakdown['local'] * $local_rate_per_day;
+            $trainingAllowance += $amount;
+            $trainingDetails[] = [
+                'type' => 'Local Training',
+                'days' => $trainingBreakdown['local'],
+                'rate' => $local_rate_per_day,
+                'amount' => $amount
+            ];
+        }
+        
+        // Continuous Training
+        if ($trainingBreakdown['continuous'] > 0) {
+            $amount = $trainingBreakdown['continuous'] * $cadetRate['continuous'];
+            $trainingAllowance += $amount;
+            $trainingDetails[] = [
+                'type' => 'Continuous Training',
+                'days' => $trainingBreakdown['continuous'],
+                'rate' => $cadetRate['continuous'],
+                'amount' => $amount
+            ];
+        }
+        
+        // Camp Training
+        if ($trainingBreakdown['camp'] > 0) {
+            $amount = $trainingBreakdown['camp'] * $cadetRate['camp'];
+            $trainingAllowance += $amount;
+            $trainingDetails[] = [
+                'type' => 'Camp Training',
+                'days' => $trainingBreakdown['camp'],
+                'rate' => $cadetRate['camp'],
+                'amount' => $amount
+            ];
+        }
+        
+        // Accreditation Training (Senior only)
+        if ($trainingBreakdown['accreditation'] > 0 && $rank_level == 'senior') {
+            $accreditation_rate = 62.17; // Default rate
+            $amount = $trainingBreakdown['accreditation'] * $accreditation_rate;
+            $trainingAllowance += $amount;
+            $trainingDetails[] = [
+                'type' => 'Accreditation Training',
+                'days' => $trainingBreakdown['accreditation'],
+                'rate' => $accreditation_rate,
+                'amount' => $amount
+            ];
+        }
+        
+        // Calculate additional allowances - Use default values
+        $additionalAllowance = 0;
+        $additionalDetails = [];
+        
+        // Bounty for all - Default value
+        $bounty_amount = 520.00;
+        $additionalAllowance += $bounty_amount;
         $additionalDetails[] = [
-            'type' => 'Clothing Allowance',
-            'amount' => $fixedRates['clothing_senior']
+            'type' => 'Bounty',
+            'amount' => $bounty_amount
         ];
+        
+        // Clothing for senior only - Default value
+        if ($rank_level == 'senior') {
+            $clothing_amount = 1500.00;
+            $additionalAllowance += $clothing_amount;
+            $additionalDetails[] = [
+                'type' => 'Clothing Allowance',
+                'amount' => $clothing_amount
+            ];
+        }
+        
+        // Calculate total
+        $totalAmount = $trainingAllowance + $additionalAllowance;
     }
     
-    // Calculate total
-    $totalAmount = $trainingAllowance + $additionalAllowance;
-    
-    // 5. GET ALL MONTHS WITH ALLOWANCE CALCULATIONS
+    // 6. GET ALL MONTHS WITH ALLOWANCE CALCULATIONS - REAL DATA
     $monthsSql = "SELECT DISTINCT month_year 
                  FROM allowance_calculations 
                  WHERE user_id = ?
@@ -283,13 +352,14 @@ try {
         $available_months[] = $row['month_year'];
     }
     
-    // 6. GET TOTAL SUMMARY
+    // 7. GET TOTAL SUMMARY - REAL DATA sama macam admin
     $summarySql = "SELECT 
                     COUNT(DISTINCT month_year) as total_months,
                     SUM(total_amount) as total_earned,
                     SUM(is_paid) as total_paid_months,
                     SUM(CASE WHEN is_paid = 1 THEN total_amount ELSE 0 END) as total_paid_amount,
-                    AVG(attendance_rate) as avg_attendance_rate
+                    AVG(attendance_rate) as avg_attendance_rate,
+                    SUM(training_days) as total_training_days
                 FROM allowance_calculations 
                 WHERE user_id = ?";
     
@@ -299,12 +369,13 @@ try {
     $summaryResult = $summaryStmt->get_result();
     $summaryData = $summaryResult->fetch_assoc();
     
-    // 7. GET LATEST ALLOWANCE
+    // 8. GET LATEST ALLOWANCE - REAL DATA
     $latestAllowanceSql = "SELECT 
                             month_year,
                             total_amount,
                             is_paid,
-                            payment_date
+                            payment_date,
+                            calculated_at
                         FROM allowance_calculations 
                         WHERE user_id = ?
                         ORDER BY month_year DESC
@@ -316,7 +387,20 @@ try {
     $latestResult = $latestStmt->get_result();
     $latestAllowance = $latestResult->fetch_assoc();
     
-    // 8. CADET INFO
+    // 9. GET RATES FROM SYSTEM DEFAULTS
+    $realRates = [
+        'allowance_rate_junior' => $rates['allowance_rate_junior'],
+        'allowance_rate_intermediate' => $rates['allowance_rate_intermediate'],
+        'allowance_rate_senior' => $rates['allowance_rate_senior'],
+        'training_rate_latihan_tempatan' => 8.00, // Default value
+        'allowance_bounty' => 520.00, // Default value
+        'allowance_pakaian' => 1500.00 // Default value for senior
+    ];
+    
+    // Calculate local training rate per day
+    $local_rate_per_day = $realRates['training_rate_latihan_tempatan'] * 12;
+    
+    // 10. CADET INFO
     $cadetInfo = [
         'name' => $user['name'],
         'military_number' => $user['military_number'],
@@ -356,7 +440,7 @@ function formatCurrency($amount) {
 }
 
 function formatDate($dateString) {
-    if (empty($dateString) || $dateString == '0000-00-00') return '';
+    if (empty($dateString) || $dateString == '0000-00-00' || $dateString == '0000-00-00 00:00:00') return '';
     try {
         $date = strtotime($dateString);
         return $date ? date('d/m/Y', $date) : '';
@@ -429,6 +513,7 @@ function getTrainingCategoryLabel($category) {
     <title>My Allowance - CAAMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* CSS yang sama seperti sebelumnya */
         :root {
             --primary: #1a365d;
             --secondary: #2d3748;
@@ -446,6 +531,8 @@ function getTrainingCategoryLabel($category) {
             --excuse: #68d391;
             --money: #38a169;
             --info: #4299e1;
+            --database: #9f7aea;
+            --calculation: #38a169;
         }
         
         * {
@@ -558,6 +645,101 @@ function getTrainingCategoryLabel($category) {
             font-size: 0.75rem;
             font-weight: 600;
             background: rgba(255, 255, 255, 0.2);
+        }
+        
+        /* DATA SOURCE BADGE */
+        .data-source-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin: 5px;
+        }
+        
+        .source-database {
+            background: rgba(159, 122, 234, 0.2);
+            color: var(--database);
+            border: 1px solid rgba(159, 122, 234, 0.3);
+        }
+        
+        .source-calculation {
+            background: rgba(56, 161, 105, 0.2);
+            color: var(--calculation);
+            border: 1px solid rgba(56, 161, 105, 0.3);
+        }
+        
+        .data-source-info {
+            font-size: 0.75rem;
+            color: var(--gray);
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .allowance-summary .data-source-info {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        /* STATS GRID */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+        
+        .stat-source {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        
+        .source-indicator {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        
+        /* REAL DATA vs CALCULATION INDICATOR */
+        .data-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .indicator-real {
+            background: rgba(159, 122, 234, 0.1);
+            color: var(--database);
+            border: 1px solid rgba(159, 122, 234, 0.2);
+        }
+        
+        .indicator-calc {
+            background: rgba(56, 161, 105, 0.1);
+            color: var(--calculation);
+            border: 1px solid rgba(56, 161, 105, 0.2);
         }
         
         /* MONTH FILTER */
@@ -686,27 +868,6 @@ function getTrainingCategoryLabel($category) {
             border: 1px solid rgba(66, 153, 225, 0.3);
         }
         
-        /* STATS GRID */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .stat-card {
-            background: white;
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
-        }
-        
         .stat-icon {
             font-size: 1.5rem;
             margin-bottom: 10px;
@@ -747,13 +908,6 @@ function getTrainingCategoryLabel($category) {
             align-items: center;
             gap: 8px;
             margin-bottom: 15px;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(66, 153, 225, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0); }
         }
         
         /* ALLOWANCE DETAILS */
@@ -962,6 +1116,22 @@ function getTrainingCategoryLabel($category) {
             font-size: 0.9rem;
         }
         
+        /* DATA SOURCE COMPARISON */
+        .source-comparison {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            border-left: 3px solid var(--database);
+        }
+        
+        .comparison-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            font-size: 0.8rem;
+        }
+        
         /* MOBILE NAV */
         .mobile-nav {
             position: fixed;
@@ -1067,28 +1237,43 @@ function getTrainingCategoryLabel($category) {
             </select>
         </div>
         
-        <!-- REAL-TIME INFO BADGE -->
-        <div class="realtime-badge">
-            <i class="fas fa-sync-alt"></i>
-            <span>Real-Time Calculation | Updated: <?php echo date('d/m/Y H:i:s'); ?></span>
-        </div>
+        <!-- DATA SOURCE INFO BADGE -->
+        <?php if ($allowanceData): ?>
+            <div class="realtime-badge" style="background: linear-gradient(135deg, var(--database) 0%, #7c3aed 100%);">
+                <i class="fas fa-database"></i>
+                <span>REAL DATA FROM DATABASE | Official Record</span>
+                <span class="data-indicator indicator-real">Verified</span>
+            </div>
+        <?php else: ?>
+            <div class="realtime-badge" style="background: linear-gradient(135deg, var(--calculation) 0%, #2d8c4c 100%);">
+                <i class="fas fa-calculator"></i>
+                <span>REAL-TIME CALCULATION | Based on current rates</span>
+                <span class="data-indicator indicator-calc">Unverified</span>
+            </div>
+        <?php endif; ?>
         
         <!-- ALLOWANCE SUMMARY -->
         <div class="allowance-summary">
             <div class="summary-label">
                 <i class="fas fa-money-check-alt"></i>
-                TOTAL ALLOWANCE (REAL-TIME)
+                <?php if ($allowanceData): ?>
+                    OFFICIAL ALLOWANCE RECORD
+                <?php else: ?>
+                    REAL-TIME ALLOWANCE CALCULATION
+                <?php endif; ?>
             </div>
             
-            <?php if ($allowanceData && $allowanceData['total_amount'] > 0): ?>
+            <?php if ($allowanceData): ?>
                 <div class="summary-amount">
                     <?php echo formatCurrency($allowanceData['total_amount']); ?>
+                    <span class="data-indicator indicator-real" style="font-size: 0.6rem; margin-left: 10px;">Official</span>
                 </div>
                 <div class="summary-month">
                     <?php echo getMonthName($allowanceData['month_year']); ?>
-                    <small style="display: block; margin-top: 5px; opacity: 0.8;">
-                        <i class="fas fa-database"></i> From saved records
-                    </small>
+                    <div class="data-source-info">
+                        <i class="fas fa-database"></i>
+                        Saved in database
+                    </div>
                 </div>
                 <div class="payment-status">
                     <?php echo getPaymentBadge($allowanceData['is_paid']); ?>
@@ -1101,18 +1286,20 @@ function getTrainingCategoryLabel($category) {
             <?php else: ?>
                 <div class="summary-amount">
                     <?php echo formatCurrency($totalAmount); ?>
+                    <span class="data-indicator indicator-calc" style="font-size: 0.6rem; margin-left: 10px;">Calculated</span>
                 </div>
                 <div class="summary-month">
                     <?php echo getMonthName($selected_month); ?>
-                    <small style="display: block; margin-top: 5px; opacity: 0.8;">
-                        <i class="fas fa-sync-alt"></i> Real-time calculation
-                    </small>
+                    <div class="data-source-info">
+                        <i class="fas fa-calculator"></i>
+                        Real-time calculation (not saved)
+                    </div>
                 </div>
                 <div class="payment-status">
                     <?php if ($attendanceDays > 0): ?>
-                        <i class="fas fa-calculator"></i> Not Saved to Database
+                        <i class="fas fa-calculator"></i> Estimated Amount
                     <?php else: ?>
-                        <i class="fas fa-clock"></i> No Attendance
+                        <i class="fas fa-clock"></i> No Attendance Recorded
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -1128,6 +1315,14 @@ function getTrainingCategoryLabel($category) {
                     <?php echo $summaryData['total_months'] ?? 0; ?>
                 </div>
                 <div class="stat-label">Months Calculated</div>
+                <div class="stat-source">
+                    <span class="source-indicator indicator-real">
+                        <i class="fas fa-database"></i> Database
+                    </span>
+                    <small style="color: var(--gray); font-size: 0.7rem;">
+                        Official records
+                    </small>
+                </div>
             </div>
             
             <div class="stat-card earned">
@@ -1138,6 +1333,14 @@ function getTrainingCategoryLabel($category) {
                     <?php echo $summaryData['total_earned'] ? formatCurrency($summaryData['total_earned']) : 'RM 0.00'; ?>
                 </div>
                 <div class="stat-label">Total Accumulated</div>
+                <div class="stat-source">
+                    <span class="source-indicator indicator-real">
+                        <i class="fas fa-database"></i> Database
+                    </span>
+                    <small style="color: var(--gray); font-size: 0.7rem;">
+                        Verified amount
+                    </small>
+                </div>
             </div>
             
             <div class="stat-card paid">
@@ -1148,6 +1351,14 @@ function getTrainingCategoryLabel($category) {
                     <?php echo $summaryData['total_paid_months'] ?? 0; ?>
                 </div>
                 <div class="stat-label">Months Paid</div>
+                <div class="stat-source">
+                    <span class="source-indicator indicator-real">
+                        <i class="fas fa-database"></i> Database
+                    </span>
+                    <small style="color: var(--gray); font-size: 0.7rem;">
+                        Official payments
+                    </small>
+                </div>
             </div>
             
             <div class="stat-card attendance">
@@ -1155,49 +1366,91 @@ function getTrainingCategoryLabel($category) {
                     <i class="fas fa-chart-line"></i>
                 </div>
                 <div class="stat-number">
-                    <?php echo round($attendanceRate, 1); ?>%
+                    <?php echo $allowanceData ? number_format($allowanceData['attendance_rate'], 1) : number_format($attendanceRate, 1); ?>%
                 </div>
                 <div class="stat-label">Attendance Rate</div>
+                <div class="stat-source">
+                    <span class="source-indicator <?php echo $allowanceData ? 'indicator-real' : 'indicator-calc'; ?>">
+                        <i class="fas <?php echo $allowanceData ? 'fa-database' : 'fa-calculator'; ?>"></i>
+                        <?php echo $allowanceData ? 'Database' : 'Calculated'; ?>
+                    </span>
+                </div>
             </div>
         </div>
         
-        <!-- CURRENT RATES INFO -->
+        <!-- CURRENT RATES INFO (USING DEFAULT/REAL RATES) -->
         <div style="background: #f0f9ff; border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid var(--info);">
             <h4 style="color: var(--primary); margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-chart-line"></i> Current Allowance Rates (Real-Time)
+                <i class="fas fa-chart-line"></i> Current Allowance Rates
+                <span class="data-indicator indicator-real" style="font-size: 0.7rem;">
+                    <i class="fas fa-database"></i> System Rates
+                </span>
             </h4>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
                 <div class="rate-card-small">
                     <h5>Junior</h5>
                     <div style="font-size: 1.1rem; font-weight: bold; color: var(--money);">
-                        RM <?php echo number_format($rates['allowance_rate_junior'] ?? 0, 2); ?>
+                        RM <?php echo number_format($realRates['allowance_rate_junior'], 2); ?>
                     </div>
-                    <small style="color: var(--gray);">per day</small>
+                    <small style="color: var(--gray);">per day (continuous/camp)</small>
+                    <div class="data-source-info">
+                        <i class="fas fa-database"></i> From your records
+                    </div>
                 </div>
                 <div class="rate-card-small">
                     <h5>Intermediate</h5>
                     <div style="font-size: 1.1rem; font-weight: bold; color: var(--money);">
-                        RM <?php echo number_format($rates['allowance_rate_intermediate'] ?? 0, 2); ?>
+                        RM <?php echo number_format($realRates['allowance_rate_intermediate'], 2); ?>
                     </div>
-                    <small style="color: var(--gray);">per day</small>
+                    <small style="color: var(--gray);">per day (continuous/camp)</small>
+                    <div class="data-source-info">
+                        <i class="fas fa-database"></i> From your records
+                    </div>
                 </div>
                 <div class="rate-card-small">
                     <h5>Senior</h5>
                     <div style="font-size: 1.1rem; font-weight: bold; color: var(--money);">
-                        RM <?php echo number_format($rates['allowance_rate_senior'] ?? 0, 2); ?>
+                        RM <?php echo number_format($realRates['allowance_rate_senior'], 2); ?>
                     </div>
-                    <small style="color: var(--gray);">per day</small>
+                    <small style="color: var(--gray);">per day (continuous/camp)</small>
+                    <div class="data-source-info">
+                        <i class="fas fa-database"></i> From your records
+                    </div>
                 </div>
                 <div class="rate-card-small">
                     <h5>Local Training</h5>
                     <div style="font-size: 1.1rem; font-weight: bold; color: var(--money);">
                         RM <?php echo number_format($local_rate_per_day, 2); ?>
                     </div>
-                    <small style="color: var(--gray);">per day (<?php echo number_format($rates['training_rate_latihan_tempatan'] ?? 0, 2); ?>/hour)</small>
+                    <small style="color: var(--gray);">per day (<?php echo number_format($realRates['training_rate_latihan_tempatan'], 2); ?>/hour × 12 hours)</small>
+                    <div class="data-source-info">
+                        <i class="fas fa-database"></i> System default
+                    </div>
                 </div>
             </div>
+            <?php if ($realRates['allowance_bounty'] > 0): ?>
+            <div style="margin-top: 10px; padding: 10px; background: #e6fffa; border-radius: 8px;">
+                <h5 style="color: var(--teal); margin-bottom: 5px;">Additional Allowances</h5>
+                <div style="display: flex; gap: 20px;">
+                    <div>
+                        <small style="color: var(--gray);">Bounty (All ranks):</small>
+                        <div style="font-weight: bold; color: var(--money);">
+                            RM <?php echo number_format($realRates['allowance_bounty'], 2); ?>
+                        </div>
+                    </div>
+                    <?php if ($rank_level == 'senior' && $realRates['allowance_pakaian'] > 0): ?>
+                    <div>
+                        <small style="color: var(--gray);">Clothing (Senior):</small>
+                        <div style="font-weight: bold; color: var(--money);">
+                            RM <?php echo number_format($realRates['allowance_pakaian'], 2); ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
             <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bee3f8; color: var(--gray); font-size: 0.85rem;">
-                <i class="fas fa-info-circle"></i> These rates may change based on updates from the administrator.
+                <i class="fas fa-info-circle"></i> Rates are based on system defaults and your previous allowance calculations.
             </div>
         </div>
         
@@ -1206,13 +1459,19 @@ function getTrainingCategoryLabel($category) {
             <div class="section-header">
                 <h3 class="section-title">
                     <i class="fas fa-file-invoice-dollar"></i>
-                    Allowance Details (Real-Time)
+                    <?php if ($allowanceData): ?>
+                        Allowance Details (Official Record)
+                    <?php else: ?>
+                        Allowance Details (Real-Time Calculation)
+                    <?php endif; ?>
                 </h3>
-                <?php if ($allowanceData && $allowanceData['calculated_at']): ?>
-                    <span style="font-size: 0.8rem; color: var(--gray);">
-                        Last saved: <?php echo formatDate($allowanceData['calculated_at']); ?>
-                    </span>
-                <?php endif; ?>
+                <span style="font-size: 0.8rem; color: var(--gray); display: flex; align-items: center; gap: 5px;">
+                    <?php if ($allowanceData): ?>
+                        <i class="fas fa-database" style="color: var(--database);"></i> Database Record
+                    <?php else: ?>
+                        <i class="fas fa-calculator" style="color: var(--calculation);"></i> Real-Time
+                    <?php endif; ?>
+                </span>
             </div>
             
             <div class="details-grid">
@@ -1221,71 +1480,85 @@ function getTrainingCategoryLabel($category) {
                         <i class="fas fa-calendar-check"></i> Attendance Days
                     </span>
                     <span class="detail-value">
-                        <?php echo $attendanceDays; ?> days
+                        <?php echo $allowanceData ? $allowanceData['training_days'] : $attendanceDays; ?> days
+                        <span class="data-indicator <?php echo $allowanceData ? 'indicator-real' : 'indicator-calc'; ?>" style="font-size: 0.6rem; margin-left: 5px;">
+                            <?php echo $allowanceData ? 'Official' : 'Calculated'; ?>
+                        </span>
                     </span>
                 </div>
                 
-                <div class="detail-item">
-                    <span class="detail-label">
-                        <i class="fas fa-calendar-alt"></i> Total Sessions
-                    </span>
-                    <span class="detail-value">
-                        <?php echo $totalSessions; ?> sessions
-                    </span>
-                </div>
-                
-                <div class="detail-item">
-                    <span class="detail-label">
-                        <i class="fas fa-chart-line"></i> Attendance Rate
-                    </span>
-                    <span class="detail-value">
-                        <?php echo number_format($attendanceRate, 1); ?>%
-                    </span>
-                </div>
-                
-                <!-- Progress Bar -->
-                <div class="progress-container">
-                    <div class="progress-header">
-                        <div class="progress-title">Attendance Performance</div>
-                        <div class="progress-percent"><?php echo number_format($attendanceRate, 1); ?>%</div>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: <?php echo min($attendanceRate, 100); ?>%"></div>
-                    </div>
-                    <small style="color: var(--gray); font-size: 0.75rem;">
-                        <?php echo $attendanceDays; ?>/<?php echo $totalSessions; ?> sessions
-                    </small>
-                </div>
-                
-                <!-- Training Allowance Breakdown -->
-                <?php if (!empty($trainingDetails)): ?>
-                    <?php foreach ($trainingDetails as $detail): ?>
-                    <div class="detail-item">
-                        <span class="detail-label">
-                            <i class="fas fa-running"></i> <?php echo $detail['type']; ?>
-                        </span>
-                        <span class="detail-value amount">
-                            RM <?php echo number_format($detail['amount'], 2); ?>
-                            <small style="display: block; font-weight: normal; color: var(--gray);">
-                                <?php echo $detail['days']; ?> days × RM <?php echo number_format($detail['rate'], 2); ?>
-                            </small>
-                        </span>
-                    </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                
-                <!-- Additional Allowance -->
-                <?php if (!empty($additionalDetails)): ?>
-                    <?php foreach ($additionalDetails as $detail): ?>
-                    <div class="detail-item">
-                        <span class="detail-label">
-                            <i class="fas fa-gift"></i> <?php echo $detail['type']; ?>
-                        </span>
-                        <span class="detail-value amount">
-                            RM <?php echo number_format($detail['amount'], 2); ?>
-                        </span>
-                    </div>
-                    <?php endforeach; ?>
+                <?php if ($allowanceData): ?>
+                    <!-- SHOW OFFICIAL DATA FROM DATABASE -->
+                    <?php if (!empty($trainingDetails)): ?>
+                        <?php foreach ($trainingDetails as $detail): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">
+                                <i class="fas fa-running"></i> <?php echo $detail['type']; ?>
+                            </span>
+                            <span class="detail-value amount">
+                                <?php echo formatCurrency($detail['amount']); ?>
+                                <span class="data-indicator indicator-real" style="font-size: 0.6rem; margin-left: 5px;">
+                                    <i class="fas fa-database"></i> Official
+                                </span>
+                            </span>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($additionalDetails)): ?>
+                        <?php foreach ($additionalDetails as $detail): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">
+                                <i class="fas fa-gift"></i> <?php echo $detail['type']; ?>
+                            </span>
+                            <span class="detail-value amount">
+                                <?php echo formatCurrency($detail['amount']); ?>
+                                <span class="data-indicator indicator-real" style="font-size: 0.6rem; margin-left: 5px;">
+                                    <i class="fas fa-database"></i> Official
+                                </span>
+                            </span>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    
+                <?php else: ?>
+                    <!-- SHOW REAL-TIME CALCULATION -->
+                    <?php if (!empty($trainingDetails)): ?>
+                        <?php foreach ($trainingDetails as $detail): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">
+                                <i class="fas fa-running"></i> <?php echo $detail['type']; ?>
+                            </span>
+                            <span class="detail-value amount">
+                                <?php echo formatCurrency($detail['amount']); ?>
+                                <?php if (isset($detail['days']) && isset($detail['rate'])): ?>
+                                    <small style="display: block; font-weight: normal; color: var(--gray);">
+                                        <?php echo $detail['days']; ?> days × RM <?php echo number_format($detail['rate'], 2); ?>
+                                    </small>
+                                <?php endif; ?>
+                                <span class="data-indicator indicator-calc" style="font-size: 0.6rem; margin-left: 5px;">
+                                    <i class="fas fa-calculator"></i> Calculated
+                                </span>
+                            </span>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($additionalDetails)): ?>
+                        <?php foreach ($additionalDetails as $detail): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">
+                                <i class="fas fa-gift"></i> <?php echo $detail['type']; ?>
+                            </span>
+                            <span class="detail-value amount">
+                                <?php echo formatCurrency($detail['amount']); ?>
+                                <span class="data-indicator indicator-calc" style="font-size: 0.6rem; margin-left: 5px;">
+                                    <i class="fas fa-calculator"></i> Calculated
+                                </span>
+                            </span>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 <?php endif; ?>
                 
                 <!-- Totals -->
@@ -1319,9 +1592,10 @@ function getTrainingCategoryLabel($category) {
             
             <?php if ($allowanceData && $allowanceData['calculated_by_name']): ?>
             <div class="calculation-info">
-                <i class="fas fa-database"></i>
+                <i class="fas fa-database" style="color: var(--database);"></i>
                 <div>
-                    Official record saved by: <strong><?php echo htmlspecialchars($allowanceData['calculated_by_name']); ?></strong><br>
+                    <strong>Official Database Record</strong><br>
+                    Calculated by: <strong><?php echo htmlspecialchars($allowanceData['calculated_by_name']); ?></strong><br>
                     Calculation date: <?php echo formatDate($allowanceData['calculated_at']); ?>
                 </div>
             </div>
@@ -1329,10 +1603,11 @@ function getTrainingCategoryLabel($category) {
             
             <?php if (!$allowanceData && $attendanceDays > 0): ?>
             <div class="calculation-info" style="background: #fff3cd; border: 1px solid #ffd93d;">
-                <i class="fas fa-exclamation-triangle" style="color: #856404;"></i>
+                <i class="fas fa-calculator" style="color: var(--calculation);"></i>
                 <div>
-                    <strong>Note:</strong> This is only a real-time calculation. Official records will be saved by the administrator.
-                    The actual amount may vary depending on administrator verification.
+                    <strong>Real-Time Calculation Notice:</strong> This is only an estimate based on current attendance and rates. 
+                    The official amount will be calculated and saved by the administrator. 
+                    Differences may occur between real-time calculation and official records.
                 </div>
             </div>
             <?php endif; ?>
@@ -1343,10 +1618,13 @@ function getTrainingCategoryLabel($category) {
             <div class="section-header">
                 <h3 class="section-title">
                     <i class="fas fa-calendar-check"></i>
-                    Attendance & Payment Status
+                    Attendance Records
                 </h3>
                 <span style="font-size: 0.8rem; color: var(--gray);">
                     Month of <?php echo getMonthName($selected_month); ?>
+                    <div class="data-source-info">
+                        <i class="fas fa-database"></i> From database
+                    </div>
                 </span>
             </div>
             
@@ -1415,14 +1693,30 @@ function getTrainingCategoryLabel($category) {
         <!-- IMPORTANT NOTES -->
         <div style="background: #f0f9ff; border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid var(--accent);">
             <h4 style="color: var(--primary); margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-info-circle"></i> Important Information
+                <i class="fas fa-info-circle"></i> Data Sources & Verification
             </h4>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <div class="data-source-badge source-database">
+                    <i class="fas fa-database"></i>
+                    <div>
+                        <div style="font-weight: bold;">Database Records</div>
+                        <small style="font-size: 0.7rem;">Official, verified data</small>
+                    </div>
+                </div>
+                <div class="data-source-badge source-calculation">
+                    <i class="fas fa-calculator"></i>
+                    <div>
+                        <div style="font-weight: bold;">Real-Time Calculation</div>
+                        <small style="font-size: 0.7rem;">Estimated, unverified</small>
+                    </div>
+                </div>
+            </div>
             <ul style="color: var(--secondary); font-size: 0.85rem; line-height: 1.6;">
-                <li><strong>Real-Time Calculation:</strong> Allowance amounts are calculated based on current rates from administrator</li>
-                <li><strong>Official Records:</strong> Only calculations saved by administrator will be considered official</li>
-                <li><strong>Differences:</strong> There may be differences between real-time calculations and official records</li>
-                <li><strong>Updates:</strong> Allowance rates will be updated automatically when administrator changes rates</li>
-                <li><strong>Payment:</strong> Payment status is based on official records in the system</li>
+                <li><strong>Database Records:</strong> Official allowance calculations saved by administrators. These amounts are verified and used for actual payments.</li>
+                <li><strong>Real-Time Calculations:</strong> Estimates based on current attendance and system rates. These may differ from official records until verified by an administrator.</li>
+                <li><strong>Rates:</strong> Calculations use system default rates (RM8.00/hour for local training, RM53.83/58.00/62.17 per day for continuous/camp training).</li>
+                <li><strong>Attendance:</strong> Based on your actual attendance records in the system.</li>
+                <li><strong>Payment Status:</strong> Only database records have payment status. Real-time calculations are not paid until saved by admin.</li>
             </ul>
         </div>
     </div>
@@ -1480,18 +1774,13 @@ function getTrainingCategoryLabel($category) {
                 });
             });
             
-            // Auto-refresh page every 2 minutes for real-time updates
+            // Auto-refresh page every 5 minutes for updates
             setInterval(() => {
                 if (!document.hidden) {
-                    console.log('Auto-refresh for real-time updates...');
+                    console.log('Refreshing for latest data...');
                     window.location.reload();
                 }
-            }, 120000); // 2 minutes
-            
-            // Show refresh notification
-            const refreshTime = new Date();
-            refreshTime.setMinutes(refreshTime.getMinutes() + 2);
-            console.log('Page will be updated at: ' + refreshTime.toLocaleTimeString());
+            }, 300000); // 5 minutes
         });
         
         // Set initial opacity for animation
@@ -1500,26 +1789,6 @@ function getTrainingCategoryLabel($category) {
             card.style.transform = 'translateY(20px)';
             card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
         });
-        
-        // Animate progress bar on load
-        window.addEventListener('load', function() {
-            const progressFill = document.querySelector('.progress-fill');
-            if (progressFill) {
-                const width = progressFill.style.width;
-                progressFill.style.width = '0%';
-                
-                setTimeout(() => {
-                    progressFill.style.width = width;
-                }, 300);
-            }
-        });
-        
-        // Manual refresh button (optional)
-        function manualRefresh() {
-            if (confirm('Refresh real-time data now?')) {
-                window.location.reload();
-            }
-        }
     </script>
 </body>
 </html>
