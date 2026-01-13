@@ -1,6 +1,17 @@
-# .htaccess
+# Enable Rewrite Engine
 RewriteEngine On
 RewriteBase /
+
+# Force HTTPS (Optional - Uncomment if you want to force HTTPS)
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Set Default Page (index.php or index.html)
+DirectoryIndex index.php index.html
+
+# Redirect root domain to fypbaru/index.php (Optional)
+RewriteCond %{REQUEST_URI} ^/$
+RewriteRule ^(.*)$ /fypbaru/index.php [L,R=301]
 
 # Redirect to login if not authenticated
 RewriteCond %{REQUEST_URI} !^/index\.php
